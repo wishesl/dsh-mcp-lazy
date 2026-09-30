@@ -206,6 +206,7 @@ CI（`.github/workflows/test.yml`）：`test` 作业跑全量（Node 20/24）；
 - **免构建**：`lib/` 是提交产物，安装端不跑构建（pnpm 不装 git 依赖的 devDeps）。浏览器半是手写 bundle，改完直接提交。
 - **Windows 换行**：仓库有 `.gitattributes`（`eol=lf`）；测试读文件时统一 `\r\n → \n`。提交用 `git -c core.autocrlf=false`。
 - **清点验证工具**：`E:\gopackage2\2026-8\woker1\_contract\host` 是沙盒（装了真实 typert-loader / typert-protocol 等），`probe-manifest.mjs`、`probe-installed.mjs` 可直接用真实 loader 校验清单；改 `TYPERT` 或增删调用前后都跑一次（`cd _contract\host; node probe-manifest.mjs`）。
+- **装机时宿主在跑 → `install_bundle` 可能报 `application: failed` + `ambiguous-install`**：pnpm 其实成功（exitCode 0），profile 里 `node_modules\@yilinxiao\dsh-mcp-lazy` 也已换成新版本（读 `package.json` 版本号 + 比对 `lib\*.js` 哈希即可确认；注意本地工作区可能是 CRLF、git 检出是 LF），只是运行中的进程还持有旧模块，管理器无法声称一次干净的激活。**以磁盘文件为准，然后重启桌面版**，不要为此反复重装。
 - **`npm install --no-save` 会互相剪包**：它把上一次未写进 package.json 的包当 extraneous 删掉，所以 compat 的多个包必须**一条命令**装；跑完基线 lane 前记得 `npm ci` 还原，否则 `test/host-runtime-compat.test.mjs`（"profile 不得 shadow 宿主 runtime 包"）会失败——这是**环境问题，不是代码缺陷**，CI 里两个 job 天然分开所以不会遇到。
 - **面板写入的状态文件**：`<profile>\.dsh-mcp-lazy\profiles.json`。手工改它也能生效（下一轮装配读）；字段与 `serverProfiles` 同形，超长/多行会被归一化（描述折成一行、关键词去重截断）。
 - **不要做的事**：
