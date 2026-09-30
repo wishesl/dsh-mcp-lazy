@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const require = createRequire(import.meta.url)
 const ROUTER_TOOL_NAME = 'mcp__router__search_and_activate'
+const DESCRIBE_TOOL_NAME = 'mcp__router__describe_server'
 const PASSIVE_TOOL_NAMES = ['mcp__alpha__echo', 'mcp__beta__search']
 
 /** One registry-ready passive MCP tool: the same shape mcp-client and this plugin register. */
@@ -133,7 +134,7 @@ test('plugin imports host-owned peers for the requested DSH version', async (t) 
     execute: async () => ({ content: [{ type: 'text', text: 'passive' }] })
   })
   emit('agent/created', { agent })
-  assert.deepEqual(visibleNames(), ['mcp__router__search_and_activate'])
+  assert.deepEqual(visibleNames(), ['mcp__router__describe_server', 'mcp__router__search_and_activate'])
 
   // The prompt index: empty while nothing is managed (zero cost), then one line
   // per managed server with its derived keywords, byte-stable across calls.
@@ -147,6 +148,21 @@ test('plugin imports host-owned peers for the requested DSH version', async (t) 
   assert.match(indexText, /mcp__router__search_and_activate/)
   assert.equal(index.text(), indexText, 'an unchanged registry must produce identical bytes')
   assert.equal(index.text({ scope: undefined }), indexText, 'the provider ignores the assembly context')
+
+  // The model-facing write channel: the describe tool sits beside the router,
+  // writes through the same store the panel uses, and never touches the
+  // visibility of the server it describes.
+  const describe = definitions.get('mcp__router__describe_server')
+  assert.ok(describe !== undefined, 'a manager instance must expose the describe tool')
+  const described = await describe.execute({ serverName: 'passive', description: '被动回显服务', keywords: ['回显'] })
+  assert.match(described.content[0].text, /已写入描述/)
+  assert.match(index.text(), /被动回显服务/)
+  assert.notEqual(index.text(), indexText)
+  assert.equal(visibleNames().includes('mcp__passive__echo'), false, 'describing a server must not reveal its tools')
+
+  const refused = await describe.execute({ serverName: 'ghost', description: '不存在' })
+  assert.match(refused.content[0].text, /未写入：没有名为 "ghost"/)
+  assert.match(refused.content[0].text, /passive/)
 
   await assert.doesNotReject(() => apply(context, {
     transport: 'stdio',
@@ -282,7 +298,10 @@ test('real host: manager mode hides compatible MCP tools through the real regist
     { mode: 'manager' }
   )
   await tick()
-  assert.deepEqual(visibleFor(tools, undefined), [...PASSIVE_TOOL_NAMES, ROUTER_TOOL_NAME].sort())
+  assert.deepEqual(
+    visibleFor(tools, undefined),
+    [...PASSIVE_TOOL_NAMES, DESCRIBE_TOOL_NAME, ROUTER_TOOL_NAME].sort()
+  )
 
   // Prompt index against the REAL system-prompt service: it must register as a
   // named runtime context (the surface the conversation itemizes in the message
@@ -334,12 +353,12 @@ test('real host: manager mode hides compatible MCP tools through the real regist
   await tick()
   assert.deepEqual(
     visibleFor(tools, scopeKey),
-    [ROUTER_TOOL_NAME],
-    'the agent must see only the router while compatible MCP tools stay hidden'
+    [DESCRIBE_TOOL_NAME, ROUTER_TOOL_NAME].sort(),
+    'the agent must see only the router pair while compatible MCP tools stay hidden'
   )
   assert.deepEqual(
     visibleFor(tools, undefined),
-    [...PASSIVE_TOOL_NAMES, ROUTER_TOOL_NAME].sort(),
+    [...PASSIVE_TOOL_NAMES, DESCRIBE_TOOL_NAME, ROUTER_TOOL_NAME].sort(),
     'the global catalog must stay untouched'
   )
 
@@ -420,13 +439,16 @@ test('real host: the panel service shows the injected prompt and persists overri
 
     const service = ctx.get('mcpLazy')
     assert.ok(service !== undefined, 'the Typert service must be reachable by its namespace')
-    for (const method of ['snapshot', 'saveProfile', 'resetProfile']) {
+    for (const method of ['snapshot', 'saveProfile', 'resetProfile', 'saveSettings']) {
       assert.equal(typeof service?.[method], 'function', `the panel needs ${method}()`)
     }
+    const toolNames = () => tools.schemas().map(schema => schema.name)
 
     const before = await service.snapshot()
     assert.equal(before.available, true)
     assert.equal(before.serverCount, PASSIVE_TOOL_NAMES.length)
+    assert.deepEqual(before.modelProfileEdits, { enabled: true, source: 'default' })
+    assert.ok(toolNames().includes('mcp__router__describe_server'), 'the default must offer the write tool')
     assert.equal(before.promptIndex.enabled, true)
     assert.equal(before.promptIndex.channel, 'context')
     assert.equal(before.promptIndex.name, 'mcp-lazy:index')
@@ -477,7 +499,8 @@ test('real host: the panel service shows the injected prompt and persists overri
     const savedAlpha = saved.servers.find(server => server.serverName === 'alpha')
     assert.equal(savedAlpha.override.description, '阿尔法回显服务')
     assert.deepEqual(savedAlpha.override.keywords, ['阿尔法', 'echo'])
-    assert.deepEqual(savedAlpha.overrideSource, { description: 'custom', keywords: 'custom' })
+    // `pinned: null` is the panel's "neither writer set it" badge, not an omission.
+    assert.deepEqual(savedAlpha.overrideSource, { description: 'custom', keywords: 'custom', pinned: null })
     assert.equal(saved.store.persisted, true)
     // The injection and the section both moved to the new text.
     assert.match(saved.promptIndex.text, /阿尔法回显服务/)
@@ -501,6 +524,23 @@ test('real host: the panel service shows the injected prompt and persists overri
 
     // A bad argument is refused with a message the panel can show.
     await assert.rejects(() => service.saveProfile({ serverName: '  ' }), /serverName is required/)
+
+    // The panel's 「允许 AI 改描述」 switch: the real registry gains and loses the
+    // tool on the spot, and the choice is persisted with the rest of the file.
+    const off = await service.saveSettings({ modelProfileEdits: false })
+    assert.deepEqual(off.modelProfileEdits, { enabled: false, source: 'panel' })
+    assert.equal(toolNames().includes('mcp__router__describe_server'), false, 'the switch must retract the tool')
+    assert.equal(
+      JSON.parse(await readFile(off.store.file, 'utf8')).settings.modelProfileEdits,
+      false,
+      'the switch must survive a restart'
+    )
+
+    const on = await service.saveSettings({ modelProfileEdits: true })
+    assert.deepEqual(on.modelProfileEdits, { enabled: true, source: 'panel' })
+    assert.ok(toolNames().includes('mcp__router__describe_server'), 'turning it back on must restore the tool')
+
+    await assert.rejects(() => service.saveSettings({ modelProfileEdits: 'yes' }), /must be a boolean/)
 
     await fiber.dispose?.()
     await scope?.dispose?.()

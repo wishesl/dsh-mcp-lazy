@@ -12,6 +12,7 @@ import {
   indexSignatureKey,
   mergeServerProfiles,
   normalizeProfile,
+  resolveModelProfileEdits,
   routingHintsOf,
   splitTokens,
   withServerOverrides
@@ -231,4 +232,32 @@ test('the panel payload reports availability instead of an empty list', () => {
   // An installed manager that admitted nothing is still a working service: the
   // panel then says "no takeover-eligible MCP server found", not "unavailable".
   assert.equal(buildPanelSnapshot({ signature: 'manager:0', entries: [], passthrough: [] }, {}).available, true)
+})
+
+test('the model-edit switch resolves config over panel over the built-in default', () => {
+  // Nothing set: on, and the panel says the default decided.
+  assert.deepEqual(resolveModelProfileEdits({}, {}), { enabled: true, source: 'default' })
+  // The panel switch alone.
+  assert.deepEqual(resolveModelProfileEdits({}, { modelProfileEdits: false }), { enabled: false, source: 'panel' })
+  assert.deepEqual(resolveModelProfileEdits({}, { modelProfileEdits: true }), { enabled: true, source: 'panel' })
+  // A hand-written config key is an operator statement and wins both ways.
+  assert.deepEqual(
+    resolveModelProfileEdits({ modelProfileEdits: true }, { modelProfileEdits: false }),
+    { enabled: true, source: 'config' }
+  )
+  assert.deepEqual(
+    resolveModelProfileEdits({ modelProfileEdits: false }, { modelProfileEdits: true }),
+    { enabled: false, source: 'config' }
+  )
+  // Junk in either source never turns the switch off by accident.
+  assert.deepEqual(resolveModelProfileEdits({ modelProfileEdits: 'no' }, { modelProfileEdits: 1 }), { enabled: true, source: 'default' })
+})
+
+test('the snapshot carries the effective model-edit switch for the panel', () => {
+  const catalog = { signature: 'sig-1', entries: [PLAYWRIGHT], passthrough: [] }
+  assert.deepEqual(buildSnapshot(catalog).modelProfileEdits, { enabled: true, source: 'default' })
+  assert.deepEqual(
+    buildSnapshot(catalog, {}, 0, { modelProfileEdits: { enabled: false, source: 'config' } }).modelProfileEdits,
+    { enabled: false, source: 'config' }
+  )
 })

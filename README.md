@@ -250,6 +250,18 @@ DSH 升级大版本后，建议先运行本仓库的兼容测试，再用于重�
 - 需要中文别名或更贴切的用途说明时，直接在面板里编辑，或用 `serverProfiles` 覆盖；派生结果始终兜底。两者都会参与路由匹配。
 - 文本是「目录签名 + 有效配置」的纯函数并做了缓存：注册表不变时**逐字节相同**（对 prompt cache 友好），保存后下一轮装配重算；没有任何受管服务器时**什么都不注入**、零成本。
 
+### agent 自己也能补：`mcp__router__describe_server`
+
+模型面此前只有路由工具，「描述可以改」这件事对 agent 既不可发现、也无从下手。现在 `mode: manager` 会额外注册一个写工具：
+
+- **开关就在面板上**：设置 → MCP 管理 顶部有一个「允许 AI 改描述」开关，**点一下立即生效**（工具当场注册/撤销，不需要重启），选择写进 `.dsh-mcp-lazy/profiles.json` 的 `settings`，重启后保留。
+- 想在 YAML 里钉死：manager 配置里写 `modelProfileEdits: true|false`。**配置优先**于面板开关（面板会把它标成「配置文件固定」并禁用），再往下才是内置默认「开」——所以「显式设过」和「没设过」在 schema 里是可区分的。
+- 参数：`serverName`（受管服务器的精确名）、`description`（一句话用途，会原样进索引该行，**并参与路由匹配**）、`keywords`（可选，中文别名/路由关键词，最多 24 个）。
+- 与面板写**同一份** `.dsh-mcp-lazy/profiles.json`、同一套逐字段合并语义；不传的字段保留原值。
+- **不接受 `pinned`**：常驻/收起是工具可见性开关，只留在人类面板上 —— 写描述永远不会把服务器移出或移入接管。
+- 结果如实回报四种「写了但不算数」：未知服务器（附当前受管名单）、字段被 `serverProfiles` 固定、目标是常驻（不进索引）、写盘失败（仅本会话有效）。
+- 只影响「面板展示 + 提示词索引 + 路由打分的提示词」，不碰 `cordis.patch.yml`、不改连接与工具注册。
+
 ## 配置
 
 除既有的 server 配置外，`mode: manager` 还支持：
@@ -258,6 +270,7 @@ DSH 升级大版本后，建议先运行本仓库的兼容测试，再用于重�
 | --- | --- | --- |
 | `promptIndex` | `true` | 是否注入 MCP 提示词索引 |
 | `promptIndexLocale` | `zh` | 索引语言：`zh` / `en` |
+| `modelProfileEdits` | 面板开关（默认开） | 是否注册 `mcp__router__describe_server`（写描述/关键词）。**不设**＝面板上那个开关说了算；显式写 `true`/`false` 则钉死（面板标「配置文件固定」并禁用） |
 | `descriptionChars` | `120` | 单服务器描述截断长度 |
 | `keywordsPerServer` | `8` | 每服务器派生关键词上限 |
 | `maxServers` | `12` | 索引最多列出的服务器数（超出记一行提示） |
@@ -298,6 +311,20 @@ npm test
 测试覆盖自动接管、会话隔离、动态工具目录、安全放行、原 MCP 执行器保留、显式 server 生命周期、面板写入的持久化与降级，以及真实 stdio MCP 的分页、调用和目录变化通知。CI 会在 `0.1.0-rc.6 / rc.7 / rc.8 / 0.2.0-rc.1 / 0.2.0-rc.2` 的矩阵上逐版本跑真宿主兼容用例；在 `0.2.0-rc.2` 上这些用例还会用**真实的** Typert 协议挂载面板服务，验证「面板显示的提示词 = 系统提示词里那段」「保存的中文别名能被真实注册表路由出来」「覆盖写进 profile 并能被重置」。
 
 维护与交接说明（架构、配置、Typert 硬规则、排障、回滚、backlog）见 [`docs/HANDOVER.md`](./docs/HANDOVER.md)。
+
+### 本地开发：`link:` 安装要补一次宿主包
+
+profile 用 `link:` 指向本仓库时（改一行代码、重启即生效），插件的真实路径就是仓库目录，而宿主启动器只设 `NODE_PATH` —— **CJS 的 `require` 认它，ESM 的 `import` 不认**：
+
+- `@deepseek-ai/dsh-tools` / `dsh-subprocess` 声明在 `peerDependencies` 里，由宿主 loader 映射，照旧能加载；
+- `@deepseek-ai/dsh-typert-protocol` 是动态 import（宿主没有就整体跳过），解析失败时**设置面板的服务会静默缺席**，前端只报 `mcpLazy/snapshot: active Service "mcpLazy" is unavailable`。
+
+补一次即可（`npm ci` 会清掉这些链接，重跑脚本即可；脚本同时让仓库能本地跑真宿主兼容用例）：
+
+```sh
+node scripts/link-host-peers.mjs                 # 在 DSH 启动的 shell 里（NODE_PATH 可用）
+node scripts/link-host-peers.mjs <DSH安装目录>    # 否则显式给 DSH 安装目录
+```
 
 ## 许可证
 

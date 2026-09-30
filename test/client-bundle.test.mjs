@@ -51,7 +51,7 @@ async function loadBundle() {
 }
 
 /** Client context double: records dictionary, mount, slot registration. */
-function clientContext({ snapshotResult, saveResult, resetResult } = {}) {
+function clientContext({ snapshotResult, saveResult, resetResult, saveSettingsResult } = {}) {
   const record = { dictionaries: [], mounted: undefined, injected: undefined, registration: undefined, panel: undefined, calls: [] }
   const ctx = {
     effect: (factory) => {
@@ -87,6 +87,10 @@ function clientContext({ snapshotResult, saveResult, resetResult } = {}) {
             resetProfile: async (input) => {
               record.calls.push(['resetProfile', input])
               return resetResult
+            },
+            saveSettings: async (input) => {
+              record.calls.push(['saveSettings', input])
+              return saveSettingsResult
             }
           }
         },
@@ -146,7 +150,8 @@ const SNAPSHOT = {
     reason: '',
     text: PROMPT_TEXT
   },
-  store: { persisted: true, file: 'C:\\Users\\Tony\\.dsh\\profiles\\desktop\\.dsh-mcp-lazy\\profiles.json', warning: null }
+  store: { persisted: true, file: 'C:\\Users\\Tony\\.dsh\\profiles\\desktop\\.dsh-mcp-lazy\\profiles.json', warning: null },
+  modelProfileEdits: { enabled: true, source: 'default' }
 }
 
 /** A write answer: the fresh snapshot, with the panel's own save reflected. */
@@ -220,12 +225,25 @@ test('the browser bundle registers one settings.section entry and mounts every d
     )
   }
   // Parameter codecs are validated by the loader too, so both faces must agree on
-  // what a write argument looks like.
+  // what a write argument looks like. Each method has its own shape, so the
+  // sample follows the descriptor's method.
+  const parameterSamples = {
+    saveProfile: { serverName: 'playwright' },
+    resetProfile: { serverName: 'playwright' },
+    saveSettings: { modelProfileEdits: true }
+  }
+  const badSamples = {
+    saveProfile: [{ serverName: '' }, /serverName/],
+    resetProfile: [{ serverName: '' }, /serverName/],
+    saveSettings: [{ modelProfileEdits: 'yes' }, /modelProfileEdits must be a boolean/]
+  }
   for (const descriptor of record.mounted.descriptors) {
     for (const parameter of descriptor.parameters) {
       const parse = parameter.codec.create().parse
-      assert.equal(parse({ serverName: 'playwright' }).serverName, 'playwright')
-      assert.throws(() => parse({ serverName: '' }), /serverName/)
+      const sample = parameterSamples[descriptor.method]
+      const [bad, pattern] = badSamples[descriptor.method]
+      assert.equal(parse(sample)[Object.keys(sample)[0]], sample[Object.keys(sample)[0]])
+      assert.throws(() => parse(bad), pattern)
       assert.throws(() => parse(null), /input must be an object/)
     }
   }
@@ -242,9 +260,50 @@ test('the browser bundle registers one settings.section entry and mounts every d
   assert.equal(typeof injected.load, 'function')
   assert.equal(typeof injected.save, 'function')
   assert.equal(typeof injected.reset, 'function')
+  assert.equal(typeof injected.saveSettings, 'function')
   assert.equal(typeof injected.t, 'function')
   assert.deepEqual(await injected.load(), SNAPSHOT)
   assert.deepEqual(record.calls, [['snapshot']])
+})
+
+test('the panel renders the model-edit switch and writes it through saveSettings', async () => {
+  const { plugin } = await loadBundle()
+  const { ctx, record } = clientContext({ snapshotResult: ok(SNAPSHOT) })
+  await plugin.apply(ctx)
+
+  const Panel = record.panel
+  const zh = record.dictionaries[0][1].zh
+  const writes = []
+  let current = SNAPSHOT
+  const instance = new Panel({
+    t: (key) => zh[key] ?? key,
+    load: async () => current,
+    save: async () => current,
+    reset: async () => current,
+    saveSettings: async (input) => {
+      writes.push(input)
+      current = { ...SNAPSHOT, modelProfileEdits: { enabled: input.modelProfileEdits, source: 'panel' } }
+      return current
+    }
+  })
+  instance.state = { status: 'ready', snapshot: SNAPSHOT }
+  assert.match(JSON.stringify(instance.render()), /data-mcp-lazy-model-edits/)
+  assert.match(JSON.stringify(instance.render()), /允许 AI 改描述/)
+  assert.equal(instance.state.snapshot.modelProfileEdits.enabled, true)
+
+  instance.toggleModelEdits()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.deepEqual(writes, [{ modelProfileEdits: false }])
+  assert.equal(instance.state.snapshot.modelProfileEdits.enabled, false)
+  assert.equal(instance.state.notice.kind, 'ok')
+
+  // A config-pinned value is badged and not clickable, instead of appearing to
+  // accept a click that the host would ignore.
+  const pinned = new Panel({ t: (key) => zh[key] ?? key, load: async () => SNAPSHOT })
+  pinned.state = { status: 'ready', snapshot: { ...SNAPSHOT, modelProfileEdits: { enabled: false, source: 'config' } } }
+  const pinnedText = JSON.stringify(pinned.render())
+  assert.match(pinnedText, /配置文件固定/)
+  assert.match(pinnedText, /"disabled":true/)
 })
 
 test('the panel renders servers, tools, the injected prompt and the footer', async () => {

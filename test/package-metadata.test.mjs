@@ -100,8 +100,9 @@ test('the Typert manifest is owned by this package and carries strict codecs', (
     assert.ok(Number.isInteger(invocation.sourceLocation.line) && invocation.sourceLocation.line >= 1)
     assert.ok(Number.isInteger(invocation.sourceLocation.column) && invocation.sourceLocation.column >= 1)
   }
-  // The panel reads the catalog, shows the injected prompt, and writes overrides.
-  assert.deepEqual([...methods].sort(), ['resetProfile', 'saveProfile', 'snapshot'])
+  // The panel reads the catalog, shows the injected prompt, writes overrides, and
+  // flips its own global switch.
+  assert.deepEqual([...methods].sort(), ['resetProfile', 'saveProfile', 'saveSettings', 'snapshot'])
 })
 
 test('the write invocations accept a well-formed profile and reject a malformed one', () => {
@@ -135,6 +136,15 @@ test('the write invocations accept a well-formed profile and reject a malformed 
 
   assert.deepEqual(resetParse({ serverName: 'tavily' }), { serverName: 'tavily' })
   assert.throws(() => resetParse({}), /serverName must be a non-empty string/)
+
+  // The settings switch travels as one boolean, and only that boolean.
+  const settingsParse = TYPERT.invocations
+    .find(invocation => invocation.method === 'saveSettings')
+    .parameters[0].codec.create().parse
+  assert.deepEqual(settingsParse({ modelProfileEdits: false }), { modelProfileEdits: false })
+  assert.throws(() => settingsParse({}), /modelProfileEdits must be a boolean/)
+  assert.throws(() => settingsParse({ modelProfileEdits: 'yes' }), /modelProfileEdits must be a boolean/)
+  assert.throws(() => settingsParse(null), /input must be an object/)
 })
 
 test('package discovery metadata exposes the MCP token-saving use case', () => {

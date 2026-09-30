@@ -8,6 +8,7 @@ import { Config, apply } from '../../lib/index.js'
 import { apply as applyPassiveToolProvider } from './passive-tool-provider.mjs'
 
 const routerToolName = 'mcp__router__search_and_activate'
+const describeToolName = 'mcp__router__describe_server'
 
 const fixture = fileURLToPath(new URL('./dynamic-mcp-server.mjs', import.meta.url))
 const tempRoot = await mkdtemp(join(tmpdir(), 'dsh-mcp-lazy-host-'))
@@ -263,6 +264,23 @@ function configurationDefaults() {
     maxSnapshotTools: 200,
     serverProfiles: {}
   })
+  // No default: "unset" must stay distinguishable from an explicit false, or the
+  // panel switch could never win over the built-in default.
+  assert.equal(Object.hasOwn(manager, 'modelProfileEdits'), false)
+}
+
+/** The panel switch / config key can keep the model-facing write tool out entirely. */
+async function modelProfileEditsSwitchHidesTheTool() {
+  const context = createContext()
+  await assert.doesNotReject(() => apply(context, { mode: 'manager', modelProfileEdits: false }))
+  await applyPassiveToolProvider(context, { serverName: 'passive-alpha', conforming: true, counter: { value: 0 } })
+  const agent = context.createAgent('edits-off')
+  context.emit('agent/created', { agent })
+  assert.deepEqual(context.visibleNames(agent), [routerToolName])
+  assert.equal(context.definitions.has(describeToolName), false)
+  context.cleanup()
+  assert.equal(context.definitions.size, 0)
+  assert.equal(context.handlerCount(), 0)
 }
 
 async function universalManagerLifecycle() {
@@ -283,8 +301,8 @@ async function universalManagerLifecycle() {
   context.emit('agent/created', { agent: first })
   context.emit('agent/created', { agent: second })
 
-  assert.deepEqual(context.visibleNames(first), [routerToolName])
-  assert.deepEqual(context.visibleNames(second), [routerToolName])
+  assert.deepEqual(context.visibleNames(first), [describeToolName, routerToolName])
+  assert.deepEqual(context.visibleNames(second), [describeToolName, routerToolName])
   await assert.rejects(
     call(context, 'mcp__passive-alpha__echo', { text: 'must-stay-hidden' }, first),
     /missing registered tool: mcp__passive-alpha__echo/
@@ -297,7 +315,7 @@ async function universalManagerLifecycle() {
   assert.match(managedRoute.content[0].text, /managed-fixture/)
   assert.equal(await starts(stateFile), 1)
   assert.ok(context.visibleNames(first).includes('mcp__managed-fixture__echo'))
-  assert.deepEqual(context.visibleNames(second), [routerToolName])
+  assert.deepEqual(context.visibleNames(second), [describeToolName, routerToolName])
   assert.equal(
     (await call(context, 'mcp__managed-fixture__echo', { text: 'managed-host-ok' }, first)).content[0].text,
     'managed-host-ok'
@@ -311,9 +329,10 @@ async function universalManagerLifecycle() {
   assert.deepEqual(context.visibleNames(first), [
     'mcp__passive-alpha__counter',
     'mcp__passive-alpha__echo',
+    describeToolName,
     routerToolName
   ])
-  assert.deepEqual(context.visibleNames(second), [routerToolName])
+  assert.deepEqual(context.visibleNames(second), [describeToolName, routerToolName])
   assert.ok(!context.visibleNames(first).includes('mcp__managed-fixture__echo'))
 
   const echo = await call(context, 'mcp__passive-alpha__echo', { text: 'passive-host-ok' }, first)
@@ -323,7 +342,35 @@ async function universalManagerLifecycle() {
   })
 
   context.emit('agent/turn-stopping', { agent: first })
-  assert.deepEqual(context.visibleNames(first), [routerToolName])
+  assert.deepEqual(context.visibleNames(first), [describeToolName, routerToolName])
+
+  // The model-facing write channel. A manager-owned server (registered without
+  // an explicit lazy instance) turns the new description into a routing hint.
+  const described = await call(context, describeToolName, {
+    serverName: 'passive-beta',
+    description: '静默回声夹具',
+    keywords: ['回声']
+  }, second)
+  assert.match(described.content[0].text, /已写入描述/)
+  assert.match(described.content[0].text, /未能写入磁盘/, 'this fixture has no profile directory')
+
+  const routedByDescription = await call(context, routerToolName, { query: '静默回声夹具' }, second)
+  assert.match(routedByDescription.content[0].text, /passive-beta/)
+  assert.deepEqual(context.visibleNames(first), [describeToolName, routerToolName], 'describing a server must not reveal it')
+
+  // A server that also owns an explicit lazy instance keeps its text in the
+  // index, but its routing entry is the explicit one; the write must still land
+  // and must not disturb the mask.
+  const describedDual = await call(context, describeToolName, {
+    serverName: 'managed-fixture',
+    description: '双属主夹具'
+  }, second)
+  assert.match(describedDual.content[0].text, /已写入描述/)
+
+  const refused = await call(context, describeToolName, { serverName: 'ghost', description: '不存在' }, second)
+  assert.match(refused.content[0].text, /未写入：没有名为 "ghost"/)
+  assert.match(refused.content[0].text, /passive-beta/)
+
   context.cleanup()
   assert.equal(context.definitions.size, 0)
   assert.equal(context.handlerCount(), 0)
@@ -611,6 +658,7 @@ try {
   await setupFailuresRollBackAcquiredResources()
   await fullLifecycle()
   configurationDefaults()
+  await modelProfileEditsSwitchHidesTheTool()
   await universalManagerLifecycle()
   await demandDisappearsDuringReconnect()
   await sharedRouterCleanupOrder()

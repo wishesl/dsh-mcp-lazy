@@ -156,4 +156,88 @@ test('an empty server name is refused', () => {
   const store = createProfileStore({ resolveDirectory: () => undefined })
   assert.throws(() => store.save('  ', { description: 'x' }), /serverName is required/)
   assert.throws(() => store.clear(''), /serverName is required/)
+  assert.throws(() => store.merge('', { description: 'x' }), /serverName is required/)
+})
+
+test('merge changes only the fields it was given and reports the pin it moved', async () => {
+  const dir = await tempProfile()
+  try {
+    const store = createProfileStore({ resolveDirectory: () => dir })
+
+    // The panel's 常驻 switch sends `pinned` alone and must not need the text.
+    store.merge('tavily', { pinned: true })
+    assert.deepEqual(store.overrides().tavily, { pinned: true })
+
+    // A text write must read the pin back, not drop it (a whole-object save would).
+    const text = store.merge('tavily', { description: '联网检索', keywords: ['联网搜索'] })
+    assert.deepEqual(store.overrides().tavily, {
+      pinned: true,
+      description: '联网检索',
+      keywords: ['联网搜索']
+    })
+    assert.equal(text.pinnedChanged, false)
+    assert.deepEqual(text.previous, { pinned: true })
+
+    // Unpinning is the one write that has to move the visibility mask.
+    const unpinned = store.merge('tavily', { pinned: false })
+    assert.equal(unpinned.pinnedChanged, true)
+    assert.deepEqual(unpinned.previous, { pinned: true, description: '联网检索', keywords: ['联网搜索'] })
+    assert.deepEqual(store.overrides().tavily, { description: '联网检索', keywords: ['联网搜索'] })
+
+    // Merging into a server with no entry yet behaves like a first write.
+    const fresh = store.merge('fresh', { description: '新条目' })
+    assert.equal(fresh.previous, null)
+    assert.equal(fresh.pinnedChanged, false)
+    assert.deepEqual(store.overrides().fresh, { description: '新条目' })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('panel settings live in the same file, merge, and never grow it when unset', async () => {
+  const dir = await tempProfile()
+  try {
+    const store = createProfileStore({ resolveDirectory: () => dir })
+    assert.deepEqual(store.settings(), {})
+    store.save('playwright', { description: '浏览器自动化' })
+
+    // A server write before any setting must not invent a settings block.
+    let raw = JSON.parse(await readFile(join(dir, STORE_DIR, STORE_FILE), 'utf8'))
+    assert.equal(Object.hasOwn(raw, 'settings'), false)
+
+    const saved = store.saveSettings({ modelProfileEdits: false })
+    assert.deepEqual(saved.previous, {})
+    assert.deepEqual(saved.settings, { modelProfileEdits: false })
+    assert.equal(saved.persisted, true)
+    raw = JSON.parse(await readFile(join(dir, STORE_DIR, STORE_FILE), 'utf8'))
+    assert.deepEqual(raw.settings, { modelProfileEdits: false })
+    assert.deepEqual(raw.servers, { playwright: { description: '浏览器自动化' } }, 'a settings write keeps the server overrides')
+
+    // Unknown keys are dropped, and a fresh store (the next DSH start) reads back.
+    store.saveSettings({ modelProfileEdits: true, somethingElse: 'nope' })
+    assert.deepEqual(store.settings(), { modelProfileEdits: true })
+    const reopened = createProfileStore({ resolveDirectory: () => dir })
+    assert.deepEqual(reopened.settings(), { modelProfileEdits: true })
+    assert.deepEqual(reopened.overrides(), { playwright: { description: '浏览器自动化' } })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('a non-boolean setting is not trusted, and the servers still load', async () => {
+  const dir = await tempProfile()
+  try {
+    const { mkdirSync, writeFileSync } = await import('node:fs')
+    mkdirSync(join(dir, STORE_DIR), { recursive: true })
+    writeFileSync(
+      join(dir, STORE_DIR, STORE_FILE),
+      JSON.stringify({ version: STORE_VERSION, servers: { alpha: { description: 'a' } }, settings: { modelProfileEdits: 'yes', junk: 1 } }),
+      'utf8'
+    )
+    const store = createProfileStore({ resolveDirectory: () => dir })
+    assert.deepEqual(store.settings(), {})
+    assert.deepEqual(store.overrides(), { alpha: { description: 'a' } })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
