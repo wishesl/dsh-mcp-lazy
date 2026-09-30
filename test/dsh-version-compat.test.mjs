@@ -51,6 +51,7 @@ test('plugin imports host-owned peers for the requested DSH version', async (t) 
   const definitions = new Map()
   const cleanups = []
   const listeners = new Map()
+  const sections = []
   const emit = (event, payload) => {
     for (const handler of [...(listeners.get(event) ?? [])]) handler(payload)
   }
@@ -84,6 +85,27 @@ test('plugin imports host-owned peers for the requested DSH version', async (t) 
         await new Promise((resolve) => setImmediate(resolve))
         return cleanup?.()
       })
+    },
+    // The prompt index is an optional surface: the plugin reaches it through
+    // ctx.inject(['systemPrompt']), so the stub host must serve that too.
+    inject(deps, callback) {
+      assert.deepEqual(deps, ['systemPrompt'])
+      callback({
+        systemPrompt: {
+          getSectionOrder(name) {
+            assert.equal(name, 'MCP_SERVERS')
+            return 3100
+          },
+          section(value) {
+            sections.push(value)
+            return () => {}
+          }
+        },
+        effect(factory) {
+          const cleanup = factory()
+          cleanups.push(async () => cleanup?.())
+        }
+      })
     }
   }
   const restrictions = new Set()
@@ -112,6 +134,19 @@ test('plugin imports host-owned peers for the requested DSH version', async (t) 
   })
   emit('agent/created', { agent })
   assert.deepEqual(visibleNames(), ['mcp__router__search_and_activate'])
+
+  // The prompt index: empty while nothing is managed (zero cost), then one line
+  // per managed server with its derived keywords, byte-stable across calls.
+  const index = sections.find(section => section.name === 'mcp-lazy:index')
+  assert.ok(index !== undefined, 'the prompt index section must be registered')
+  assert.equal(index.order, 3100 + 50)
+  assert.equal(index.interpolate, false)
+  const indexText = index.text()
+  assert.match(indexText, /## MCP 服务器（按需加载）/)
+  assert.match(indexText, /passive/)
+  assert.match(indexText, /mcp__router__search_and_activate/)
+  assert.equal(index.text(), indexText, 'an unchanged registry must produce identical bytes')
+  assert.equal(index.text({ scope: undefined }), indexText, 'the provider ignores the assembly context')
 
   await assert.doesNotReject(() => apply(context, {
     transport: 'stdio',
@@ -168,9 +203,40 @@ test('real host: manager mode hides compatible MCP tools through the real regist
   const visibleFor = (tools, scopeKey) => tools.schemas(scopeKey).map(schema => schema.name).sort()
 
   const ctx = new Context()
-  // The real ToolRuntime injects `systemPrompt`; this stub keeps the test on the
-  // registry surface only, so no prompt assembly is needed.
-  ctx.provide('systemPrompt', { tools: () => () => undefined, section: () => () => undefined })
+  // Mount the REAL system-prompt service when the matrix row ships it, so the
+  // prompt-index assertions below run against the real canonical band lookup
+  // instead of a hand-rolled constant. A row without it falls back to the
+  // ToolRuntime-only stub and skips those assertions.
+  let sectionOrderOf
+  const capturedSections = []
+  let systemPromptModule
+  try {
+    systemPromptModule = await import('@deepseek-ai/dsh-system-prompt')
+  } catch {
+    systemPromptModule = undefined
+  }
+  if (systemPromptModule !== undefined && typeof systemPromptModule.default === 'function') {
+    try {
+      await ctx.plugin(systemPromptModule.default)
+      const service = ctx.get('systemPrompt')
+      if (service !== undefined && typeof service.getSectionOrder === 'function') {
+        sectionOrderOf = (name) => service.getSectionOrder(name)
+        const realSection = service.section.bind(service)
+        service.section = (value) => {
+          capturedSections.push(value)
+          return realSection(value)
+        }
+      }
+    } catch {
+      sectionOrderOf = undefined
+      capturedSections.length = 0
+    }
+  }
+  // The real ToolRuntime injects `systemPrompt`; without the real service a
+  // stub keeps the test on the registry surface.
+  if (sectionOrderOf === undefined) {
+    ctx.provide('systemPrompt', { tools: () => () => undefined, section: () => () => undefined })
+  }
   await ctx.plugin(ToolRuntime)
 
   const tools = ctx.get('tools')
@@ -193,6 +259,20 @@ test('real host: manager mode hides compatible MCP tools through the real regist
   )
   await tick()
   assert.deepEqual(visibleFor(tools, undefined), [...PASSIVE_TOOL_NAMES, ROUTER_TOOL_NAME].sort())
+
+  // Prompt index against the REAL band lookup: it must land just after the
+  // official MCP_SERVERS sections and stay byte-stable for an unchanged registry.
+  if (sectionOrderOf !== undefined) {
+    assert.equal(sectionOrderOf('MCP_SERVERS'), 3100, 'the canonical MCP_SERVERS band must be stable')
+    const index = capturedSections.find(section => section.name === 'mcp-lazy:index')
+    assert.ok(index !== undefined, 'the plugin must register the MCP prompt index')
+    assert.equal(index.order, 3100 + 50)
+    assert.equal(index.interpolate, false)
+    const first = index.text()
+    assert.match(first, /## MCP 服务器/)
+    assert.match(first, new RegExp(PASSIVE_TOOL_NAMES[0].split('__')[1]))
+    assert.equal(index.text(), first, 'an unchanged registry must produce identical bytes')
+  }
 
   // Mint the agent scope the way the host does, then let the manager reconcile it.
   let scope

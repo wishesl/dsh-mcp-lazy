@@ -24,7 +24,7 @@ test('bundle enables exactly one universal manager entry', () => {
 
 test('README explains universal takeover boundaries and safe opt-out', () => {
   for (const text of [
-    '0.6.0',
+    '0.7.0',
     'mode: manager',
     'mcp-lazy-manager',
     '兼容性准入',
@@ -46,3 +46,4 @@ test('README explains universal takeover boundaries and safe opt-out', () => {
   assert.doesNotMatch(readme, /移除或禁用 id 为 `mcp-lazy-manager`/)
   assert.match(readme, /mcp__router__search_and_activate/)
 })
+

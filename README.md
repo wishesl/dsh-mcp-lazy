@@ -4,7 +4,7 @@
 
 一句话说明它的用途：**MCP 装得越多，模型每轮都要读取的工具说明就越多；这个插件会先把暂时用不到的工具说明藏起来，需要时再加载，从而减少 Token 消耗。**
 
-当前版本：`0.6.0`
+当前版本：`0.7.0`
 
 ## 它解决了什么问题
 
@@ -206,6 +206,66 @@ DSH 升级大版本后，建议先运行本仓库的兼容测试，再用于重�
 - 保温连接只存在于当前 DSH 进程中，不会写入磁盘。DSH 重启后需要重新读取工具目录。
 - Token 数据是工具说明的近似测量，不能直接换算为账单金额。
 
+## 设置面板：只读的「MCP 管理」
+
+装的 MCP 越多，越难记住到底有哪些服务器、各自提供什么。插件在**设置**里注册了一个独立菜单（槽位 `settings.section`，条目 id `mcp-lazy`），只读展示：
+
+- 每个受管服务器的名称、工具数、**路由关键词**与可选描述；
+- 展开后是它的工具清单（名称 + 描述，描述截断到 300 字符）；
+- 未通过兼容性准入的 `mcp__*` 工具单独折叠列出（它们保持常驻可见）；
+- 目录签名与快照时间，便于判断是否刷新过。
+
+面板数据来自 Host 的 `mcpLazy` Typert Remote 命名空间（`mcpLazy/snapshot`），经真实工具注册表读取，**只读**：没有写入、没有审批、没有 profile 修改，内容永不进入模型上下文。浏览器半是手写的 `__ModuleLoader__` bundle（`lib/client.js`，无构建步骤），React 由宿主模块表提供。宿主缺少 `@deepseek-ai/dsh-typert-protocol` 时（0.1.x 线）面板自动缺席，插件其余功能不受影响。
+
+## 提示词索引：不再手工维护 MCP 清单
+
+会话装配时，插件会在系统提示词里注入一段 MCP 索引（段名 `mcp-lazy:index`，位置是官方 `MCP_SERVERS` 段位之后 +50）：
+
+```text
+## MCP 服务器（按需加载）
+
+以下 MCP 服务器的工具默认不在工具表里。需要时调用 `mcp__router__search_and_activate`：带 `query`（能力关键词）或 `serverName`（精确指定服务器名）；披露后当轮即可直接调用。
+
+- chrome-devtools（30 个工具）: devtools, console, network, performance, lighthouse
+- context7（2 个工具）: docs, library, query
+- playwright（25 个工具）: browser, navigate, click, screenshot, page
+- tavily（5 个工具）: search, extract, crawl, map, research
+```
+
+- **关键词与描述默认全部从 MCP 定义派生**（服务器名、`routingHints`、工具名、工具描述），与路由器打分**同源** —— 面板里看到的、注入提示词的就是路由真正搜索的东西，因此无需人工维护清单。
+- 需要中文别名或更贴切的用途说明时，用 `serverProfiles` 覆盖即可，派生结果始终兜底。
+- 文本是「目录签名 + 配置」的纯函数并做了缓存：注册表不变时**逐字节相同**（对 prompt cache 友好）；没有任何受管服务器时返回空串、零成本。
+- 工具变化（`tools/change`）后签名变化会自然重算；新会话、新 agent 各自装配时都会拿到最新版本。
+
+## 配置
+
+除既有的 server 配置外，`mode: manager` 还支持：
+
+| 键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `promptIndex` | `true` | 是否注入 MCP 提示词索引 |
+| `promptIndexLocale` | `zh` | 索引语言：`zh` / `en` |
+| `descriptionChars` | `120` | 单服务器描述截断长度 |
+| `keywordsPerServer` | `8` | 每服务器派生关键词上限 |
+| `maxServers` | `12` | 索引最多列出的服务器数（超出记一行提示） |
+| `maxSnapshotTools` | `200` | 面板快照的工具条目上限（超出计入 `omittedTools`） |
+| `serverProfiles` | `{}` | `{ "<serverName>": { description?, keywords? } }` 覆盖派生结果 |
+
+显式 lazy server 配置新增 `promptIndex`（默认 `true`），用于把该 server 写进同一段索引：
+
+```yaml
+- insert:
+    - id: mcp-lazy
+      name: '@yilinxiao/dsh-mcp-lazy'
+      config:
+        transport: stdio
+        serverName: filesystem
+        command: npx
+        args: [-y, '@modelcontextprotocol/server-filesystem', '/tmp']
+        routingHints: [文件, 目录]
+        promptIndex: true
+```
+
 ## 给开发者的工作原理
 
 1. manager 监听 DSH 的工具目录，只接管能够完整识别的 `mcp__<server>__<tool>` 工具组。普通工具、重名工具和无法确认来源的 MCP 直接放行。
@@ -227,3 +287,4 @@ npm test
 ## 许可证
 
 MIT
+

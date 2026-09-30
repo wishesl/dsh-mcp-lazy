@@ -251,8 +251,18 @@ function configurationDefaults() {
   for (const normalized of [stdio, http]) {
     assert.equal(normalized.warmIdleMs, 300000)
     assert.deepEqual(normalized.routingHints, [])
+    assert.equal(normalized.promptIndex, true)
   }
-  assert.deepEqual(manager, { mode: 'manager' })
+  assert.deepEqual(manager, {
+    mode: 'manager',
+    promptIndex: true,
+    promptIndexLocale: 'zh',
+    descriptionChars: 120,
+    keywordsPerServer: 8,
+    maxServers: 12,
+    maxSnapshotTools: 200,
+    serverProfiles: {}
+  })
 }
 
 async function universalManagerLifecycle() {
