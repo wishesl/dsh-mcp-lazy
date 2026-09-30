@@ -220,7 +220,9 @@ test('real host: manager mode hides compatible MCP tools through the real regist
   // instead of a hand-rolled constant. A row without it falls back to the
   // ToolRuntime-only stub and skips those assertions.
   let sectionOrderOf
+  let contextOrderOf
   const capturedSections = []
+  const capturedContexts = []
   let systemPromptModule
   try {
     systemPromptModule = await import('@deepseek-ai/dsh-system-prompt')
@@ -238,10 +240,20 @@ test('real host: manager mode hides compatible MCP tools through the real regist
           capturedSections.push(value)
           return realSection(value)
         }
+        if (typeof service.getContextOrder === 'function') {
+          contextOrderOf = (name) => service.getContextOrder(name)
+          const realContext = service.context.bind(service)
+          service.context = (value) => {
+            capturedContexts.push(value)
+            return realContext(value)
+          }
+        }
       }
     } catch {
       sectionOrderOf = undefined
+      contextOrderOf = undefined
       capturedSections.length = 0
+      capturedContexts.length = 0
     }
   }
   // The real ToolRuntime injects `systemPrompt`; without the real service a
@@ -272,18 +284,40 @@ test('real host: manager mode hides compatible MCP tools through the real regist
   await tick()
   assert.deepEqual(visibleFor(tools, undefined), [...PASSIVE_TOOL_NAMES, ROUTER_TOOL_NAME].sort())
 
-  // Prompt index against the REAL band lookup: it must land just after the
-  // official MCP_SERVERS sections and stay byte-stable for an unchanged registry.
+  // Prompt index against the REAL system-prompt service: it must register as a
+  // named runtime context (the surface the conversation itemizes in the message
+  // flow, same channel as the workspace AGENTS.md chain), and stay byte-stable.
   if (sectionOrderOf !== undefined) {
     assert.equal(sectionOrderOf('MCP_SERVERS'), 3100, 'the canonical MCP_SERVERS band must be stable')
-    const index = capturedSections.find(section => section.name === 'mcp-lazy:index')
-    assert.ok(index !== undefined, 'the plugin must register the MCP prompt index')
-    assert.equal(index.order, 3100 + 50)
-    assert.equal(index.interpolate, false)
-    const first = index.text()
-    assert.match(first, /## MCP 服务器/)
-    assert.match(first, new RegExp(PASSIVE_TOOL_NAMES[0].split('__')[1]))
-    assert.equal(index.text(), first, 'an unchanged registry must produce identical bytes')
+    if (contextOrderOf !== undefined) {
+      assert.equal(contextOrderOf('SUBAGENT_DELEGATION'), 120, 'the canonical context band must be stable')
+      const index = capturedContexts.find(context => context.name === 'mcp-lazy:index')
+      assert.ok(index !== undefined, 'the plugin must register the MCP index as a runtime context')
+      assert.equal(index.order, 120 + 10)
+      assert.equal(capturedSections.length, 0, 'a context-capable host must not also register a section (that would inject the index twice)')
+      const first = index.text({})
+      assert.match(first, /## MCP 服务器/)
+      assert.match(first, new RegExp(PASSIVE_TOOL_NAMES[0].split('__')[1]))
+      assert.equal(index.text({}), first, 'an unchanged registry must produce identical bytes')
+
+      // This is what the model receives and what the chat entry attributes: the
+      // snapshot keeps each contributor's name.
+      const service = ctx.get('systemPrompt')
+      const assembly = await service.assemble({})
+      const contribution = assembly.contexts.find(context => context.name === 'mcp-lazy:index')
+      assert.ok(contribution !== undefined, 'the index must reach the assembled prompt')
+      assert.equal(contribution.text, first)
+      const snapshot = systemPromptModule.renderContextSnapshot(assembly)
+      assert.match(snapshot, /Current runtime context/)
+      assert.ok(snapshot.includes(first), 'the injected snapshot must carry the index verbatim')
+    } else {
+      // A host with only the section band still injects, just without the entry.
+      const index = capturedSections.find(section => section.name === 'mcp-lazy:index')
+      assert.ok(index !== undefined, 'the plugin must fall back to a prompt section')
+      assert.equal(index.order, 3100 + 50)
+      assert.equal(index.interpolate, false)
+      assert.match(index.text(), /## MCP 服务器/)
+    }
   }
 
   // Mint the agent scope the way the host does, then let the manager reconcile it.
@@ -362,11 +396,11 @@ test('real host: the panel service shows the injected prompt and persists overri
   try {
     await ctx.plugin(systemPromptModule.default)
     const systemPrompt = ctx.get('systemPrompt')
-    const capturedSections = []
-    const realSection = systemPrompt.section.bind(systemPrompt)
-    systemPrompt.section = (value) => {
-      capturedSections.push(value)
-      return realSection(value)
+    const capturedContexts = []
+    const realContext = systemPrompt.context.bind(systemPrompt)
+    systemPrompt.context = (value) => {
+      capturedContexts.push(value)
+      return realContext(value)
     }
 
     await ctx.plugin(dshTools.default)
@@ -394,14 +428,22 @@ test('real host: the panel service shows the injected prompt and persists overri
     assert.equal(before.available, true)
     assert.equal(before.serverCount, PASSIVE_TOOL_NAMES.length)
     assert.equal(before.promptIndex.enabled, true)
-    assert.equal(before.promptIndex.sectionName, 'mcp-lazy:index')
-    assert.equal(before.promptIndex.order, systemPrompt.getSectionOrder('MCP_SERVERS') + 50)
+    assert.equal(before.promptIndex.channel, 'context')
+    assert.equal(before.promptIndex.name, 'mcp-lazy:index')
+    assert.equal(before.promptIndex.order, systemPrompt.getContextOrder('SUBAGENT_DELEGATION') + 10)
     assert.match(before.promptIndex.text, /## MCP 服务器/)
 
-    // The panel's text is byte-identical to the section the model would receive.
-    const index = capturedSections.find(section => section.name === 'mcp-lazy:index')
-    assert.ok(index !== undefined, 'the plugin must register the prompt index section')
-    assert.equal(before.promptIndex.text, index.text())
+    // The panel's text is byte-identical to the context the model and the
+    // conversation's runtime-context entry see.
+    const index = capturedContexts.find(context => context.name === 'mcp-lazy:index')
+    assert.ok(index !== undefined, 'the plugin must register the MCP index as a runtime context')
+    assert.equal(before.promptIndex.text, index.text({}))
+    const assembly = await systemPrompt.assemble({})
+    assert.equal(
+      assembly.contexts.find(context => context.name === 'mcp-lazy:index')?.text,
+      before.promptIndex.text,
+      'the assembled prompt must carry the index verbatim'
+    )
 
     // The panel store writes into the profile directory it resolved.
     assert.equal(before.store.persisted, true)
@@ -439,7 +481,7 @@ test('real host: the panel service shows the injected prompt and persists overri
     assert.equal(saved.store.persisted, true)
     // The injection and the section both moved to the new text.
     assert.match(saved.promptIndex.text, /阿尔法回显服务/)
-    assert.equal(saved.promptIndex.text, index.text())
+    assert.equal(saved.promptIndex.text, index.text({}))
     assert.notEqual(saved.promptIndex.text, before.promptIndex.text)
     // ...and it is on disk, so a restart keeps it.
     assert.deepEqual(

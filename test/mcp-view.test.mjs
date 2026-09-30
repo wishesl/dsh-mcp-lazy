@@ -194,8 +194,9 @@ test('the snapshot carries the injected prompt verbatim and the store state', ()
   const surfaces = {
     promptIndex: {
       enabled: true,
-      sectionName: 'mcp-lazy:index',
-      order: 3150,
+      channel: 'context',
+      name: 'mcp-lazy:index',
+      order: 130,
       locale: 'zh',
       reason: '',
       text: '## MCP 服务器（按需加载）\n\n- playwright（3 个工具）: browser'
@@ -206,7 +207,8 @@ test('the snapshot carries the injected prompt verbatim and the store state', ()
   const snapshot = buildSnapshot(catalog, {}, 1700000000000, surfaces)
   // Byte-for-byte: the panel shows the artifact, not a re-derivation of it.
   assert.equal(snapshot.promptIndex.text, surfaces.promptIndex.text)
-  assert.equal(snapshot.promptIndex.order, 3150)
+  assert.equal(snapshot.promptIndex.order, 130)
+  assert.equal(snapshot.promptIndex.channel, 'context')
   assert.deepEqual(snapshot.store, surfaces.store)
   assert.deepEqual(snapshot.servers[0].override, { description: null, keywords: null })
   assert.deepEqual(snapshot.servers[0].overrideSource, { description: null, keywords: null })
@@ -214,6 +216,7 @@ test('the snapshot carries the injected prompt verbatim and the store state', ()
   // Without a live surface the snapshot still answers the panel's questions.
   const bare = buildSnapshot(catalog)
   assert.equal(bare.promptIndex.enabled, false)
+  assert.equal(bare.promptIndex.channel, 'none')
   assert.equal(bare.promptIndex.reason, 'unavailable')
   assert.equal(bare.promptIndex.text, '')
   assert.equal(bare.store.persisted, false)

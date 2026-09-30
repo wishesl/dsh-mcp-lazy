@@ -3,7 +3,7 @@
 > 面向下一个接手的人（或下一个会话）。目标：不用重新推导，就能继续开发、验证、排障、回滚。
 > 仓库：`https://github.com/wishesl/dsh-mcp-lazy`（fork 自 `leaforbook/dsh-mcp-lazy`）
 > 本地克隆：`E:\gopackage2\2026-8\woker1\dsh-mcp-lazy-fork`
-> 当前版本：`0.8.0`（本地提交，**尚未推送**：见 §3 与 §4 的装机步骤）
+> 当前版本：`0.9.0`（见 §3 与 §4 的装机步骤）
 
 ---
 
@@ -28,7 +28,8 @@ DSH 的 MCP 懒加载桥：把已连接的 MCP 工具**按会话隐藏**，只�
 | `b300509` | **兼容 0.2 线**：peer 走廊 `>=0.1.0-rc.6 <0.3.0` 且标 optional；CI `dsh-compat` 矩阵加 `0.2.0-rc.1/rc.2`；新增真宿主用例（真 cordis + 真 ToolService + 真 scope `restrict`）；Windows 修复（`--import` + file URL、CRLF 容错、`.gitattributes`）；仓库地址指向本 fork；0.6.0 |
 | `9ae40ce` | **设置面板 + 提示词索引**：新增 `lib/wire.js`、`lib/service.js`、`lib/typert.host.js`、`lib/client.js`、`lib/mcp-view.js`；`apply` 接线；7 个新配置键；0.7.0 |
 | `c587384` | **修复面板 404**：`TYPERT.package` 用真实包名；codec 改 `strict`；Remote 服务改为 `apply` 内 await 挂载；加三道防回归（含真实 `validateTypertManifest`） |
-| `d1fc363` | **面板可见注入提示词 + 自定义描述（0.8.0，本地已提交未推送）**：新增 `lib/profile-store.js`（profile 内 `.dsh-mcp-lazy/profiles.json`，原子写、fail-soft、无锚点则内存态）；`lib/wire.js` 增 `saveProfile`/`resetProfile` 两个**带 strict 参数 codec** 的调用；`lib/service.js` 从只读升级为读+写并回传 `promptIndex`/`store`；`lib/mcp-view.js` 增 `normalizeProfile`/`mergeServerProfiles`/`withServerOverrides`/`buildPanelSnapshot`/`routingHintsOf`；`lib/tool-router.js` + `lib/universal-manager.js` 让 `routingHints` 支持**函数源**（面板别名真正参与路由）；`lib/client.js` 增「注入的提示词」区块与逐服务器编辑器；新增 `test/profile-store.test.mjs` 并在 compat 车道加真宿主面板用例 |
+| `d1fc363` | **面板可见注入提示词 + 自定义描述（0.8.0）**：新增 `lib/profile-store.js`（profile 内 `.dsh-mcp-lazy/profiles.json`，原子写、fail-soft、无锚点则内存态）；`lib/wire.js` 增 `saveProfile`/`resetProfile` 两个**带 strict 参数 codec** 的调用；`lib/service.js` 从只读升级为读+写并回传 `promptIndex`/`store`；`lib/mcp-view.js` 增 `normalizeProfile`/`mergeServerProfiles`/`withServerOverrides`/`buildPanelSnapshot`/`routingHintsOf`；`lib/tool-router.js` + `lib/universal-manager.js` 让 `routingHints` 支持**函数源**（面板别名真正参与路由）；`lib/client.js` 增「注入的提示词」区块与逐服务器编辑器；新增 `test/profile-store.test.mjs` 并在 compat 车道加真宿主面板用例 |
+| `<待填：本次提交>` | **索引改走运行时上下文 → 聊天消息流里直接可见（0.9.0）**：`lib/index.js` 由 `systemPrompt.section()` 改为 `systemPrompt.context({ name: 'mcp-lazy:index', order: getContextOrder('SUBAGENT_DELEGATION') + 10 })`，老宿主没有 `context()` 时回退 section（注入仍生效，只是不在消息流单独成条）；快照字段 `sectionName` → `name` 并新增 `channel`（`context` / `section` / `none`），两面 codec 同步；面板文案按渠道区分并指出「会话里看哪条」；真宿主用例新增 `assemble().contexts` 与 `renderContextSnapshot()` 的逐字断言 + 「用 context 时不得再有 section（防重复注入）」 |
 
 ## 4. 本机环境事实
 
@@ -37,7 +38,7 @@ DSH 的 MCP 懒加载桥：把已连接的 MCP 工具**按会话隐藏**，只�
 | harness | `@deepseek-ai/dsh-desktop-runtime@0.2.0-rc.2`（全部 `@deepseek-ai/dsh-*` 都是 0.2.0-rc.2，`cordis 4.0.4`）；安装目录 `D:\work\tool\DSH` |
 | profile | `C:\Users\Tony\.dsh\profiles\desktop`（Electron 独占；`dsh --profile desktop` 会被拒绝） |
 | 插件安装方式 | profile `package.json` 里 `"@yilinxiao/dsh-mcp-lazy": "github:wishesl/dsh-mcp-lazy"` |
-| 已装版本 | `0.7.0` / `c587384`；**0.8.0 尚未装机**：需推送后 `plugin_manager install_bundle` + 重启桌面版（面板里看到「注入的提示词」区块即装机成功） |
+| 已装版本 | 0.8.0 已装机（`d1fc363`）；**0.9.0 需再次 `plugin_manager install_bundle` + 重启桌面版**（聊天消息流里出现 `mcp-lazy:index` 条目即装机成功） |
 | MCP 服务器（全部常开、全部被接管） | `playwright` 25 工具、`chrome-devtools` 30、`tavily` 5、`context7` 2 |
 | 面板自定义描述的落盘位置 | `<profile>\.dsh-mcp-lazy\profiles.json`（本机即 `C:\Users\Tony\.dsh\profiles\desktop\.dsh-mcp-lazy\profiles.json`） |
 | 包名 | 仍是 `@yilinxiao/dsh-mcp-lazy`（**未**改成 `@wishesl/...`，见 §11 待决策） |
@@ -90,18 +91,20 @@ lib/service.js  McpLazyService extends TypertRemoteService
 **写入语义（改这块前先读）**
 
 - 覆盖是**逐字段**合并、**配置文件赢**：`cordis.patch.yml` 的 `serverProfiles` 定过的字段面板改不动（面板标注「配置文件固定」）；没定过的字段面板生效。
-- 面板保存**不需要重启**：`readView()` 每次求值都带上 store，`indexSignatureKey` 含 `serverProfiles`，因此下一轮装配重算索引段。
+- 面板保存**不需要重启**：`readView()` 每次求值都带上 store，`indexSignatureKey` 含 `serverProfiles`，因此下一轮装配重算索引。
 - 写入只影响「面板展示 + 提示词索引 + 路由提示词」，**不触碰**接管/披露/工具可见性（那条路径仍只有 `agent/created`、`tools/change`、`restrict`）。
 - 保存的**描述与关键词同时是路由提示词**（`dsh-mcp-lazy-fork/lib/index.js` 的 `customHintsOf` → `installUniversalManager({ hintsOf })`），所以索引里广告的中文别名真的能被 `query` 命中。
 
-## 6. 能力二：MCP 提示词索引（取代手工维护的清单）
+## 6. 能力二：MCP 提示词索引（聊天消息流里可见）
 
-- 段名 `mcp-lazy:index`，order = `ctx.systemPrompt.getSectionOrder('MCP_SERVERS') + 50`（即 3100 + 50），`interpolate: false`。
+- 通过 `ctx.systemPrompt.context()` 注册一条**具名运行时上下文**：名字 `mcp-lazy:index`，order = `getContextOrder('SUBAGENT_DELEGATION') + 10`（即 120 + 10 = 130；宿主无 band 查询时用常量 130）。
+- **为什么用 context 而不是 section**：DSH 的 agent-loop 会从 `renderContextSections(assembly)` 形成 runtime-context surface 消息 —— 它**按贡献者名字保留每个条目**（注释原文：“a consumer that presents the snapshot uses them to attribute each part to the subsystem that contributed it”）。因此会话消息流里会出现一条归属于 `mcp-lazy:index` 的条目，跟根目录 `AGENTS.md` 的自动注入同样呈现。section 只进系统提示词正文，不在消息流单独成条。
+- 老宿主（没有 `systemPrompt.context()`）**自动回退** `section({ name:'mcp-lazy:index', order: getSectionOrder('MCP_SERVERS')+50, interpolate:false })`；两条路**只会走一条**，真宿主用例断言「context 生效时 section 数量为 0」。
 - 每次装配求值（新会话 / 工具变化 / **面板保存**自然更新），按「目录 signature + 有效配置」缓存 → 注册表不变时**逐字节相同**（prompt cache 友好）；无受管服务器时返回空串。
 - 每服务器一行：`- <name>（N 个工具）: <description 或 关键词列表>`。
 - **关键词/描述来源**：默认**全部从 MCP 定义派生**（服务器名、`routingHints`、工具名、工具描述）——与路由器 `searchableText` 同源；中文别名等用面板编辑或 `serverProfiles` 覆盖（两者都会参与路由匹配）。
 - 语言：`promptIndexLocale: 'zh' | 'en'`，默认 `zh`。
-- **面板显示的就是注入的原文**：`snapshot.promptIndex.text` 与段注册用的 `provideText()` 是同一个函数；compat 车道的真宿主用例断言二者逐字节相等（别再各写一份求值逻辑）。
+- **面板「注入的提示词」显示的就是这条条目的原文**：`snapshot.promptIndex.text` 与段/上下文注册用的 `provideText()` 是同一个函数（`channel` 标明走的哪条）；compat 车道的真宿主用例断言 `assemble().contexts` 与 `renderContextSnapshot()` 里逐字一致（别再各写一份求值逻辑）。
 
 ## 7. 配置参考（新增）
 
@@ -109,7 +112,7 @@ lib/service.js  McpLazyService extends TypertRemoteService
 
 | 键 | 默认 | 说明 |
 |---|---|---|
-| `promptIndex` | `true` | 是否注入索引段 |
+| `promptIndex` | `true` | 是否注入索引（0.9.0 起走运行时上下文） |
 | `promptIndexLocale` | `zh` | `zh` / `en` |
 | `descriptionChars` | `120` | 单服务器描述截断 |
 | `keywordsPerServer` | `8` | 每服务器派生关键词上限 |
@@ -117,7 +120,7 @@ lib/service.js  McpLazyService extends TypertRemoteService
 | `maxSnapshotTools` | `200` | 面板快照工具条目上限 |
 | `serverProfiles` | `{}` | `{ "<serverName>": { description?, keywords? } }`；与面板写入**逐字段**合并（配置赢），并且**参与路由匹配** |
 
-显式 lazy server 新增 `promptIndex`（默认 `true`）。示例见 `README.md` 的「配置」一节。0.8.0 **没有新增配置键**：自定义描述走面板 + `<profile>\.dsh-mcp-lazy\profiles.json`。
+显式 lazy server 新增 `promptIndex`（默认 `true`）。示例见 `README.md` 的「配置」一节。0.8.0/0.9.0 **没有新增配置键**：自定义描述走面板 + `<profile>\.dsh-mcp-lazy\profiles.json`。
 
 ## 8. Typert 远程通道：三条硬规则（踩过的坑）
 
@@ -145,7 +148,7 @@ npm test                      # 145 项：142 通过 / 0 失败 / 3 skipped（co
 | `test/mcp-view.test.mjs` | 关键词派生（含 CJK 不产噪声）、覆盖归一化/逐字段合并与来源、截断/上限、空目录、字节稳定、快照裁剪、**面板 payload 的 available 语义**、`routingHintsOf` 的数组/函数两种源 |
 | `test/profile-store.test.mjs` | 面板写入落盘与重载、原子写（无残留 tmp）、归一化、删除、损坏文件降级、无 profile 目录/锚点不可用→内存态、空 serverName 拒绝 |
 | `test/client-bundle.test.mjs` | 浏览器 bundle：`__ModuleLoader__` 注册、`settings.section` 参数、**两面 3 个描述符逐字段一致**（含参数 codec）、快照/参数 codec 行为、面板渲染（含**注入提示词区块**与编辑器）、空态/不可用/错误态、保存/重置/失败保留草稿/内存态提示 |
-| `test/dsh-version-compat.test.mjs` | stub-host：索引段名/order/文本/稳定；real-host ①：真 cordis + 真 ToolService + 真 scope `restrict` + 真 system-prompt 段位 + **真实 `validateTypertManifest`**；real-host ②（0.8.0 新增）：**真 TypertRemoteService** 挂载面板服务，`snapshot` 文本 == 段文本、`saveProfile` 落盘、中文别名经真实注册表**路由并披露**、`resetProfile` 还原、空 serverName 报错 |
+| `test/dsh-version-compat.test.mjs` | stub-host（无 `context()`）：回退 section 的段名/order 3150/文本/稳定；real-host ① 另加：**注册为运行时上下文**（order 130）、`assemble().contexts` 与 `renderContextSnapshot()` 逐字含索引、**用 context 时 section 数为 0**；real-host ①：真 cordis + 真 ToolService + 真 scope `restrict` + 真 system-prompt 段位 + **真实 `validateTypertManifest`**；real-host ②（0.8.0 新增）：**真 TypertRemoteService** 挂载面板服务，`snapshot` 文本 == 上下文文本、`saveProfile` 落盘、中文别名经真实注册表**路由并披露**、`resetProfile` 还原、空 serverName 报错 |
 | `test/package-metadata.test.mjs` | 版本/仓库/exports/`dsh.client`/peer 走廊/**`TYPERT.package === pkg.name`** + 清单形状 + 3 个调用与参数 codec 行为 |
 | `test/universal-manager.test.mjs` | 现有覆盖 + **`hintsOf` 函数源即时生效**（保存后同一对象下一次查询即命中，并经路由工具披露）、抛错的 hints 源降级 |
 | `test/fixtures/plugin-host-harness.mjs` | 真 stdio MCP 夹具的完整生命周期（含配置默认值断言） |
@@ -161,18 +164,20 @@ npm ci --legacy-peer-deps --ignore-scripts   # 装完必须还原，否则基线
 
 CI（`.github/workflows/test.yml`）：`test` 作业跑全量（Node 20/24）；`dsh-compat` 作业矩阵 `0.1.0-rc.6 / rc.7 / rc.8 / 0.2.0-rc.1 / 0.2.0-rc.2`，第二步 `continue-on-error` 尝试装上面 4 个可选包（0.1.x 没有 typert，装不上就保持第一步的状态，用例自行 skip）。
 
-**已验证（0.8.0，本机 2026-08 会话）**：`npm test` 142/142 通过（3 skipped）；`0.2.0-rc.2` 上 compat **3/3 通过**（含新增真宿主面板用例：面板文本 == 段文本、覆盖落盘到临时 profile、中文别名经真实注册表路由披露、重置还原）；`validateTypertManifest` 对本地与 `_contract/host` 沙盒都通过；另一会话的子 agent 零工具调用逐字复述了注入的索引段（证明 0.7.0 的注入确实生效）。
-**未验证（装机后做）**：0.8.0 装机后桌面版面板出现「注入的提示词」区块、编辑器保存后的下一轮注入真的变化（见 §10）。另外**客户端→网关的「位置参数 → wire 字段」装箱**在浏览器半（`@deepseek-ai/dsh-api-remotes` 的 `$mount`），Node 侧无法覆盖：描述符按 `InvocationParameterDescriptor` 原样写（`name: 'input'` / `wire: 'input'` / `source: 'json'` / strict codec），若这一跳有问题，表现会是保存时报 codec/参数错误（面板会显示原文），届时对照 `lib/wire.js` 的 `saveProfile` 描述符排查。
+**已验证（0.9.0，本机本会话）**：`npm test` 145 项 / 142 通过 / 0 失败 / 3 skipped；`0.2.0-rc.2` 上 compat **3/3 通过**，其中新增断言证明索引走的是**运行时上下文**（order 130、`assemble().contexts` 与 `renderContextSnapshot()` 逐字包含、section 数为 0），且面板文本与之一致；`validateTypertManifest` 对本地与 `_contract/host` 沙盒都通过。
+**未验证（装机后做）**：0.9.0 装机后**聊天消息流里出现 `mcp-lazy:index` 条目**（见 §10 第 2 条）——这是本次主验收，Node 侧覆盖不到「UI 把 context 快照渲染成条目」这一跳（该消息由 `dsh-agent-loop` 生成、`mf` 渲染 `context` 节点，本仓库的断言只到 `renderContextSnapshot()`）。另外**客户端→网关的「位置参数 → wire 字段」装箱**在浏览器半（`@deepseek-ai/dsh-api-remotes` 的 `$mount`），Node 侧同样无法覆盖：描述符按 `InvocationParameterDescriptor` 原样写（`name: 'input'` / `wire: 'input'` / `source: 'json'` / strict codec），若这一跳有问题，表现会是保存时报 codec/参数错误（面板会显示原文），届时对照 `lib/wire.js` 的 `saveProfile` 描述符排查。
 
-## 10. 装机后必做的三条 live 验证（0.8.0）
+## 10. 装机后必做的 live 验证（0.9.0）
 
 先推送 → `plugin_manager install_bundle target=github:wishesl/dsh-mcp-lazy` → **重启桌面版**。
 
 1. **面板数据**：设置 → MCP 管理 → 应列出 4 个服务器（playwright 25 / chrome-devtools 30 / tavily 5 / context7 2）、关键词、可展开工具清单；点「刷新」应更新快照时间。
-   - 若仍 404：检查 `plugin_manager list_plugins` 里 `mcp-lazy-manager` 是否 active，以及 profile 是否真的装到 0.8.0。
-2. **注入的提示词可见**：同一面板顶部应出现「注入的提示词」折叠区（默认展开），里面的文本应与 §6 的格式一致、含 4 行服务器；点「复制」应写入剪贴板。
-   - 区块为空/显示原因提示：按提示核对 `promptIndex: false`、宿主段位查询、当前是否有受管服务器（见 §13）。
-3. **自定义描述生效**：任选一台服务器 → 「自定义描述」→ 填描述与中文关键词 → 保存。预期：① 底部出现状态文件路径 `...\.dsh-mcp-lazy\profiles.json`；② 该服务器的描述/关键词 chip 立刻更新，并出现「面板自定义」徽标；③ 面板顶部的注入文本同步改变；④ **新建会话**后问模型「playwright 是干什么的」（或直接用中文别名调 `mcp__router__search_and_activate`），应能命中该服务器；⑤ 点「恢复默认」后一切回到派生结果。
+   - 若仍 404：检查 `plugin_manager list_plugins` 里 `mcp-lazy-manager` 是否 active，以及 profile 是否真的装到 0.9.0。
+2. **聊天消息流里的注入条目（0.9.0 主验收）**：**新建会话**随便发一句，在消息流里找那条 `Current runtime context …` 消息（与 AGENTS.md 注入条目同一形态），展开后应有一条归属于 `mcp-lazy:index` 的条目，内容与 §6 的格式一致、含你机器上的 4 台服务器。
+   - 看不到条目：面板「注入的提示词」会写清原因（`promptIndex: false` / 宿主无 `systemPrompt.context()` / 当前无受管服务器）；渠道显示为「提示词段」说明该宿主没有 `context()`，退回老通道（仍然注入，只是不在消息流单独成条）。
+   - 这条消息是**真实注入**而非 UI 复述：它由 agent-loop 依据 `renderContextSections()` 形成，模型看到的同一份。
+3. **面板对照**：设置 → MCP 管理 → 同一条原文逐字可见（默认展开），点「复制」应写入剪贴板。
+4. **自定义描述生效**：任选一台服务器 → 「自定义描述」→ 填描述与中文关键词 → 保存。预期：① 底部出现状态文件路径 `...\.dsh-mcp-lazy\profiles.json`；② 该服务器的描述/关键词 chip 立刻更新，并出现「面板自定义」徽标；③ 面板顶部的注入文本同步改变，**聊天里那条条目也随之更新**；④ **新建会话**后直接用中文别名调 `mcp__router__search_and_activate`，应能命中该服务器；⑤ 点「恢复默认」后一切回到派生结果。
    - 若保存后徽标显示「配置文件固定」：说明 `cordis.patch.yml` 里 `serverProfiles` 定义了同名字段（配置赢，属预期）。
 
 ## 11. 已知限制与待办
@@ -215,7 +220,7 @@ CI（`.github/workflows/test.yml`）：`test` 作业跑全量（Node 20/24）；
 |---|---|---|
 | 面板出现但「读取失败 … HTTP 404」 | 清单校验失败 → 调用没注册 | `TYPERT.package` 是否等于真实包名；codec 是否 `strict`（result **和每个参数**）；用 `_contract/host/probe-installed.mjs` 跑真实 loader |
 | 设置里没有「MCP 管理」 | 客户端 bundle 没加载 / 宿主缺 typert | `plugin_manager list_plugins` 看插件是否 active；`dsh.client` 声明是否在；重启是否完成 |
-| 提示词里没有索引段 | `systemPrompt` 缺失或没有 `getSectionOrder` | 面板「注入的提示词」区块会直接写明原因（`disabled` / `unsupported` / `empty`）；再核对 `promptIndex: false` |
+| 聊天里没有 MCP 注入条目 | 宿主没有 `systemPrompt.context()`（面板渠道会显示「提示词段」），或索引未启用/为空 | 面板「注入的提示词」写明渠道与原因（`disabled` / `unsupported` / `empty`）；确认 `promptIndex: false` 没被配置 |
 | 保存了描述但索引没变 | 配置同名字段优先；或保存失败 | 卡片上的来源徽标是否「配置文件固定」；底部状态文件路径/失败原因；点刷新看 `override` 是否已更新 |
 | 保存后底部显示「未找到 profile 目录」 | 宿主没暴露 `ctx.baseUrl` / `desktopProfiles` | 只在本次会话有效；检查宿主是否在 `apply` 前设好 `baseUrl`（typert-loader 也依赖它） |
 | 面板文本与模型实际收到的不一致 | 有人另写了一份求值逻辑 | 必须复用 `provideText()`；compat 用例 `real host: the panel service…` 会断言二者逐字节相等 |
@@ -243,7 +248,7 @@ plugin_manager set_plugin target=@yilinxiao/dsh-mcp-lazy enabled=false
 ### 附：一页速查
 
 ```
-仓库        https://github.com/wishesl/dsh-mcp-lazy          HEAD <见 §3 最新一行> / 0.8.0
+仓库        https://github.com/wishesl/dsh-mcp-lazy          HEAD <见 §3 最新一行> / 0.9.0
 本地克隆    E:\gopackage2\2026-8\woker1\dsh-mcp-lazy-fork
 沙盒        E:\gopackage2\2026-8\woker1\_contract\host      （真实 typert-loader 校验：node probe-manifest.mjs）
 profile     C:\Users\Tony\.dsh\profiles\desktop              （Electron 独占，改插件后需重启）
@@ -251,7 +256,7 @@ profile     C:\Users\Tony\.dsh\profiles\desktop              （Electron 独占�
 面板        settings.section id=mcp-lazy / remote 命名空间 mcpLazy
             snapshot() / saveProfile({serverName,description?,keywords?}) / resetProfile({serverName})
 面板状态    <profile>\.dsh-mcp-lazy\profiles.json            （面板自定义描述/关键词，原子写）
-索引段      mcp-lazy:index @ order 3150（= MCP_SERVERS 3100 + 50），面板「注入的提示词」显示其原文
+注入条目    mcp-lazy:index @ order 130（= SUBAGENT_DELEGATION 120 + 10）的**运行时上下文**
 测试        npm test → 145 项（142 通过 / 3 skipped）
 真宿主      DSH_COMPAT_VERSION=0.2.0-rc.2 node --test test/dsh-version-compat.test.mjs   （3/3）
 ```

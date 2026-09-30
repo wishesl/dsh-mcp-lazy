@@ -138,8 +138,9 @@ const SNAPSHOT = {
   passthrough: [],
   promptIndex: {
     enabled: true,
-    sectionName: 'mcp-lazy:index',
-    order: 3150,
+    channel: 'context',
+    name: 'mcp-lazy:index',
+    order: 130,
     locale: 'zh',
     reason: '',
     text: PROMPT_TEXT
@@ -269,7 +270,10 @@ test('the panel renders servers, tools, the injected prompt and the footer', asy
   assert.match(text, /data-mcp-lazy-prompt-index/)
   assert.match(text, /## MCP 服务器（按需加载）/)
   assert.match(text, /mcp-lazy:index/)
-  assert.match(text, /3150/)
+  assert.match(text, /order 130/)
+  // The runtime-context channel is the one that shows up in the conversation, so
+  // the panel says where to look for the same entry.
+  assert.match(text, /会话里看/)
   // The editor is behind a per-server toggle, so it is absent until opened.
   assert.doesNotMatch(text, /data-mcp-lazy-editor/)
   assert.match(text, /复制/)
