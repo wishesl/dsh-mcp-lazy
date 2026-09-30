@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { MCP_LAZY_INVOCATIONS } from '../lib/wire.js'
+import { MCP_LAZY_INVOCATIONS, MCP_LAZY_PACKAGE } from '../lib/wire.js'
 
 const BUNDLE_URL = new URL('../lib/client.js', import.meta.url).href
 
@@ -117,6 +117,18 @@ const SNAPSHOT = {
   passthrough: []
 }
 
+/** Descriptor data, function members excluded (each face owns its own closure). */
+const project = (descriptor) => ({
+  id: descriptor.id,
+  service: descriptor.service,
+  namespace: descriptor.namespace,
+  method: descriptor.method,
+  invocation: descriptor.invocation,
+  parameters: descriptor.parameters,
+  result: { mode: descriptor.result.mode, typeSymbol: descriptor.result.typeSymbol },
+  sourceLocation: descriptor.sourceLocation
+})
+
 test('the browser bundle registers one read-only settings.section entry', async () => {
   const { plugin } = await loadBundle()
   assert.equal(plugin.name, 'dsh-mcp-lazy')
@@ -130,10 +142,24 @@ test('the browser bundle registers one read-only settings.section entry', async 
   assert.ok(record.dictionaries[0][1].zh.nav, 'zh dictionary must carry the nav label')
   assert.ok(record.dictionaries[0][1].en.nav, 'en dictionary must carry the nav label')
 
-  // The descriptor the bundle mounts must equal the host manifest's, or the
-  // two Typert faces would drift and the Remote call would 404.
-  assert.equal(record.mounted.package, 'dsh-mcp-lazy')
-  assert.deepEqual(record.mounted.descriptors, MCP_LAZY_INVOCATIONS)
+  // The descriptor the bundle mounts must match the host manifest's, or the two
+  // Typert faces would drift and the Remote call would 404. `package` must be
+  // the real npm name: the host loader rejects any other owner.
+  assert.equal(record.mounted.package, MCP_LAZY_PACKAGE)
+  assert.equal(record.mounted.package, '@yilinxiao/dsh-mcp-lazy')
+  assert.equal(record.mounted.descriptors.length, MCP_LAZY_INVOCATIONS.length)
+  assert.deepEqual(project(record.mounted.descriptors[0]), project(MCP_LAZY_INVOCATIONS[0]))
+  // Both faces must carry a strict codec whose parse accepts a real snapshot and
+  // rejects a malformed one — the loader requires `mode: 'strict'` outright.
+  assert.equal(record.mounted.descriptors[0].result.mode, 'strict')
+  assert.equal(record.mounted.descriptors[0].result.mode, MCP_LAZY_INVOCATIONS[0].result.mode)
+  const clientParse = record.mounted.descriptors[0].result.create().parse
+  const hostParse = MCP_LAZY_INVOCATIONS[0].result.create().parse
+  for (const parse of [clientParse, hostParse]) {
+    assert.equal(parse(SNAPSHOT), SNAPSHOT)
+    assert.throws(() => parse({ ...SNAPSHOT, servers: 'nope' }), /servers must be an array/)
+    assert.throws(() => parse(null), /result must be an object/)
+  }
 
   assert.equal(record.slot, 'settings.section')
   assert.deepEqual(record.injected, ['remote.mcpLazy', 'slots'])

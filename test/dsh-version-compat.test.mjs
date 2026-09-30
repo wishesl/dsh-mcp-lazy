@@ -192,6 +192,18 @@ test('real host: manager mode hides compatible MCP tools through the real regist
   if (cordis === undefined || dshTools === undefined || dshScope === undefined || pluginModule === undefined) {
     return t.skip(`real host packages for ${expected} do not ship the registry/scope surface`)
   }
+
+  // The settings panel only works if this package's `./typert` manifest passes
+  // the REAL loader: it must be owned by the package name and carry strict
+  // codecs. Run the loader's own validator when the row ships it.
+  const typertLoader = await optionalImport('@deepseek-ai/dsh-typert-loader')
+  if (typertLoader !== undefined && typeof typertLoader.validateTypertManifest === 'function') {
+    const { TYPERT } = await import('../lib/typert.host.js')
+    assert.doesNotThrow(
+      () => typertLoader.validateTypertManifest(require('../package.json').name, TYPERT),
+      'the real typert-loader must accept this package manifest'
+    )
+  }
   const Context = cordis.Context
   const ToolRuntime = dshTools.default
   const { createScope, scopeOf } = dshScope

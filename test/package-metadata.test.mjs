@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
+import { TYPERT } from '../lib/typert.host.js'
+
 // Normalize line endings: a Windows checkout (core.autocrlf=true) delivers CRLF,
 // which would break the multi-line bundle-patch assertion below.
 const read = async (path) =>
@@ -52,6 +54,36 @@ test('package metadata declares the whole supported DSH release corridor', () =>
     assert.equal(lock.packages[''].peerDependenciesMeta[peer].optional, true, peer)
   }
   assert.equal(pkg.peerDependencies['@deepseek-ai/dsh-typert-protocol'], undefined)
+})
+
+test('the Typert manifest is owned by this package and carries strict codecs', () => {
+  // Mirrors @deepseek-ai/dsh-typert-loader's validateTypertManifest /
+  // requireInvocation rules; the dsh-compat job runs the real validator.
+  //
+  // `package` MUST be the real npm name (scope included): a manifest owned by
+  // any other name is rejected, and the panel then 404s on every call — the bug
+  // this assertion exists for.
+  assert.equal(TYPERT.package, pkg.name)
+  assert.equal(TYPERT.face, 'host')
+  assert.ok(Array.isArray(TYPERT.schemas) && TYPERT.schemas.length === 0)
+  assert.ok(Array.isArray(TYPERT.invocations) && TYPERT.invocations.length > 0)
+  assert.deepEqual(Object.keys(TYPERT.model).sort(), ['events', 'objects', 'services'])
+  for (const invocation of TYPERT.invocations) {
+    for (const key of ['id', 'service', 'namespace', 'method']) {
+      assert.equal(typeof invocation[key], 'string', `invocation.${key} must be a string`)
+      assert.ok(invocation[key].length > 0, `invocation.${key} must not be empty`)
+    }
+    assert.deepEqual(invocation.parameters, [])
+    assert.equal(invocation.invocation.kind, 'direct')
+    // The loader rejects anything but a strict codec; `src-json` is refused.
+    assert.equal(invocation.result.mode, 'strict')
+    assert.equal(typeof invocation.result.typeSymbol, 'string')
+    assert.equal(typeof invocation.result.create, 'function')
+    assert.equal(typeof invocation.result.create().parse, 'function')
+    assert.equal(typeof invocation.sourceLocation.file, 'string')
+    assert.ok(Number.isInteger(invocation.sourceLocation.line) && invocation.sourceLocation.line >= 1)
+    assert.ok(Number.isInteger(invocation.sourceLocation.column) && invocation.sourceLocation.column >= 1)
+  }
 })
 
 test('package discovery metadata exposes the MCP token-saving use case', () => {
