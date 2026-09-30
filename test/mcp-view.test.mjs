@@ -138,14 +138,15 @@ test('mergeServerProfiles prefers the config per field and names the winner', ()
 
   // The hand-written YAML wins the field it sets; the panel keeps the one it owns.
   assert.deepEqual(merged.profiles.playwright, { description: '来自 YAML', keywords: ['浏览器'] })
-  assert.deepEqual(merged.origins.playwright, { description: 'config', keywords: 'custom' })
+  assert.deepEqual(merged.origins.playwright, { description: 'config', keywords: 'custom', pinned: null })
   // A server only the panel knows about is still an override, and vice versa.
   assert.deepEqual(merged.profiles.tavily, { keywords: ['搜索'] })
-  assert.deepEqual(merged.origins.tavily, { description: null, keywords: 'custom' })
+  assert.deepEqual(merged.origins.tavily, { description: null, keywords: 'custom', pinned: null })
   // Normalization runs on both writers: a blank config entry never wins.
   assert.deepEqual(mergeServerProfiles({ x: { description: '  ' } }, { x: { description: '面板' } }).origins.x, {
     description: 'custom',
-    keywords: null
+    keywords: null,
+    pinned: null
   })
 })
 
@@ -159,8 +160,8 @@ test('withServerOverrides feeds the panel view and the injected index', () => {
   assert.deepEqual(server.keywords.slice(0, 2), ['浏览器', '网页自动化'])
   assert.ok(server.keywords.includes('browser'), 'derived keywords stay as the fallback tail')
   // The editor is fed the effective override, never the capped/derived list.
-  assert.deepEqual(server.override, { description: '浏览器自动化：导航/点击', keywords: ['浏览器', '网页自动化'] })
-  assert.deepEqual(server.overrideSource, { description: 'custom', keywords: 'custom' })
+  assert.deepEqual(server.override, { description: '浏览器自动化：导航/点击', keywords: ['浏览器', '网页自动化'], pinned: false })
+  assert.deepEqual(server.overrideSource, { description: 'custom', keywords: 'custom', pinned: null })
 
   const text = buildIndexText([server], effective)
   assert.match(text, /浏览器自动化：导航\/点击/)
@@ -210,8 +211,8 @@ test('the snapshot carries the injected prompt verbatim and the store state', ()
   assert.equal(snapshot.promptIndex.order, 130)
   assert.equal(snapshot.promptIndex.channel, 'context')
   assert.deepEqual(snapshot.store, surfaces.store)
-  assert.deepEqual(snapshot.servers[0].override, { description: null, keywords: null })
-  assert.deepEqual(snapshot.servers[0].overrideSource, { description: null, keywords: null })
+  assert.deepEqual(snapshot.servers[0].override, { description: null, keywords: null, pinned: false })
+  assert.deepEqual(snapshot.servers[0].overrideSource, { description: null, keywords: null, pinned: null })
 
   // Without a live surface the snapshot still answers the panel's questions.
   const bare = buildSnapshot(catalog)

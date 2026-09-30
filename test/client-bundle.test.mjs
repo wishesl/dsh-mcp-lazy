@@ -127,7 +127,8 @@ const SNAPSHOT = {
     toolCount: 2,
     keywords: ['browser', 'navigate'],
     description: '浏览器操作',
-    override: { description: '浏览器操作', keywords: ['浏览器'] },
+    override: { description: '浏览器操作', keywords: ['浏览器'], pinned: false },
+    pinned: false,
     overrideSource: { description: 'custom', keywords: 'custom' },
     tools: [
       { name: 'mcp__playwright__browser_navigate', description: 'Navigate to a URL' },
@@ -151,7 +152,7 @@ const SNAPSHOT = {
 /** A write answer: the fresh snapshot, with the panel's own save reflected. */
 const SAVED_SNAPSHOT = {
   ...SNAPSHOT,
-  servers: [{ ...SNAPSHOT.servers[0], override: { description: '浏览器自动化', keywords: ['浏览器', '截图'] } }]
+  servers: [{ ...SNAPSHOT.servers[0], override: { description: '浏览器自动化', keywords: ['浏览器', '截图'], pinned: true }, pinned: true }]
 }
 
 /** Descriptor data, function members excluded (each face owns its own closure). */

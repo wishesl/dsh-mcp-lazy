@@ -15,9 +15,9 @@ const bundlePatch = await read('../cordis.patch.yml')
 
 test('package metadata publishes the installable bundle from the npm owner scope', () => {
   assert.equal(pkg.name, '@yilinxiao/dsh-mcp-lazy')
-  assert.equal(pkg.version, '0.10.0')
-  assert.equal(lock.version, '0.10.0')
-  assert.equal(lock.packages[''].version, '0.10.0')
+  assert.equal(pkg.version, '0.11.0')
+  assert.equal(lock.version, '0.11.0')
+  assert.equal(lock.packages[''].version, '0.11.0')
   assert.equal(pkg.repository.url, 'git+https://github.com/wishesl/dsh-mcp-lazy.git')
   assert.equal(pkg.homepage, 'https://github.com/wishesl/dsh-mcp-lazy#readme')
   assert.equal(pkg.bugs.url, 'https://github.com/wishesl/dsh-mcp-lazy/issues')
@@ -113,9 +113,13 @@ test('the write invocations accept a well-formed profile and reject a malformed 
   assert.deepEqual(saveParse({ serverName: 'playwright', description: '浏览器', keywords: ['浏览器'] }), {
     serverName: 'playwright',
     description: '浏览器',
-    keywords: ['浏览器']
+    keywords: ['浏览器'],
+    pinned: undefined
   })
-  assert.deepEqual(saveParse({ serverName: 'playwright' }), { serverName: 'playwright', description: undefined, keywords: undefined })
+  assert.deepEqual(saveParse({ serverName: 'playwright' }), { serverName: 'playwright', description: undefined, keywords: undefined, pinned: undefined })
+  // 常驻/收起 是布尔开关；写错类型要在网关前就被拒。
+  assert.equal(saveParse({ serverName: 'playwright', pinned: true }).pinned, true)
+  assert.throws(() => saveParse({ serverName: 'playwright', pinned: 'yes' }), /pinned must be a boolean/)
   assert.throws(() => saveParse({ serverName: '' }), /serverName must be a non-empty string/)
   assert.throws(() => saveParse({ serverName: 'x', keywords: ['ok', 7] }), /every keyword must be a string/)
   assert.throws(() => saveParse(null), /input must be an object/)

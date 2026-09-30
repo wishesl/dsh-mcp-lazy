@@ -866,3 +866,42 @@ test('a throwing hints source degrades to the server name instead of breaking th
   assert.equal(selectRoute([entry], { query: 'alpha' }).entry.serverName, 'alpha')
   disposeManager()
 })
+
+test('a 常驻 server keeps its tools visible and leaves routing', () => {
+  const host = createHost()
+  const adapter = createUniversalDshAdapter(host.ctx)
+  let controller
+  let pinned = false
+  const disposeManager = installUniversalManager(adapter, {
+    isPinnedOf: (serverName) => serverName === 'beta' && pinned,
+    onReady: (ready) => { controller = ready }
+  })
+  host.register(eagerTool('mcp__alpha__echo', 'echo alpha'))
+  host.register(eagerTool('mcp__beta__search', 'search beta'))
+  host.emit('tools/change')
+  const agent = host.createAgent('agent')
+  host.emit('agent/created', { agent })
+
+  // Both collapsed: everything but the router is hidden, and both are routable.
+  assert.deepEqual(host.visibleNames(agent), [ROUTER_TOOL_NAME])
+  assert.deepEqual(controller.getEntries().map(entry => entry.serverName), ['alpha', 'beta'])
+  assert.deepEqual(
+    controller.currentCatalog().entries.map(entry => [entry.serverName, entry.pinned]),
+    [['alpha', false], ['beta', false]]
+  )
+
+  // 常驻: the deny mask drops beta, so its tools are resident again — and the
+  // router must not offer a server it no longer hides.
+  pinned = true
+  controller.reconcilePins()
+  assert.deepEqual(host.visibleNames(agent).sort(), [ROUTER_TOOL_NAME, 'mcp__beta__search'].sort())
+  assert.deepEqual(controller.getEntries().map(entry => entry.serverName), ['alpha'])
+  assert.equal(controller.currentCatalog().entries.find(entry => entry.serverName === 'beta').pinned, true)
+
+  // Back to 收起: hidden again, routable again.
+  pinned = false
+  controller.reconcilePins()
+  assert.deepEqual(host.visibleNames(agent), [ROUTER_TOOL_NAME])
+  assert.deepEqual(controller.getEntries().map(entry => entry.serverName), ['alpha', 'beta'])
+  disposeManager()
+})
