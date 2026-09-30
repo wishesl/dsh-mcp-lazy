@@ -162,7 +162,7 @@ npm ci --legacy-peer-deps --ignore-scripts   # 装完必须还原，否则基线
 CI（`.github/workflows/test.yml`）：`test` 作业跑全量（Node 20/24）；`dsh-compat` 作业矩阵 `0.1.0-rc.6 / rc.7 / rc.8 / 0.2.0-rc.1 / 0.2.0-rc.2`，第二步 `continue-on-error` 尝试装上面 4 个可选包（0.1.x 没有 typert，装不上就保持第一步的状态，用例自行 skip）。
 
 **已验证（0.8.0，本机 2026-08 会话）**：`npm test` 142/142 通过（3 skipped）；`0.2.0-rc.2` 上 compat **3/3 通过**（含新增真宿主面板用例：面板文本 == 段文本、覆盖落盘到临时 profile、中文别名经真实注册表路由披露、重置还原）；`validateTypertManifest` 对本地与 `_contract/host` 沙盒都通过；另一会话的子 agent 零工具调用逐字复述了注入的索引段（证明 0.7.0 的注入确实生效）。
-**未验证（装机后做）**：0.8.0 装机后桌面版面板出现「注入的提示词」区块、编辑器保存后的下一轮注入真的变化（见 §10）。
+**未验证（装机后做）**：0.8.0 装机后桌面版面板出现「注入的提示词」区块、编辑器保存后的下一轮注入真的变化（见 §10）。另外**客户端→网关的「位置参数 → wire 字段」装箱**在浏览器半（`@deepseek-ai/dsh-api-remotes` 的 `$mount`），Node 侧无法覆盖：描述符按 `InvocationParameterDescriptor` 原样写（`name: 'input'` / `wire: 'input'` / `source: 'json'` / strict codec），若这一跳有问题，表现会是保存时报 codec/参数错误（面板会显示原文），届时对照 `lib/wire.js` 的 `saveProfile` 描述符排查。
 
 ## 10. 装机后必做的三条 live 验证（0.8.0）
 
