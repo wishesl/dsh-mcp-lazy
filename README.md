@@ -282,7 +282,9 @@ npm ci --legacy-peer-deps --ignore-scripts
 npm test
 ```
 
-测试覆盖自动接管、会话隔离、动态工具目录、安全放行、原 MCP 执行器保留、显式 server 生命周期，以及真实 stdio MCP 的分页、调用和目录变化通知。CI 还会测试 DSH rc.6、rc.7 和 rc.8。
+测试覆盖自动接管、会话隔离、动态工具目录、安全放行、原 MCP 执行器保留、显式 server 生命周期，以及真实 stdio MCP 的分页、调用和目录变化通知。CI 会在 `0.1.0-rc.6 / rc.7 / rc.8 / 0.2.0-rc.1 / 0.2.0-rc.2` 的矩阵上逐版本跑真宿主兼容用例。
+
+维护与交接说明（架构、配置、Typert 硬规则、排障、回滚、backlog）见 [`docs/HANDOVER.md`](./docs/HANDOVER.md)。
 
 ## 许可证
 
