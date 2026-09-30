@@ -509,3 +509,85 @@ test('real host: the panel service shows the injected prompt and persists overri
     await rm(profileDir, { recursive: true, force: true })
   }
 })
+
+test('real host: the index reaches a live agent as its own injected message', async (t) => {
+  const expected = process.env.DSH_COMPAT_VERSION
+  if (!expected) return t.skip('DSH_COMPAT_VERSION is only set by compatibility CI')
+
+  const [cordis, dshTools, pluginModule, llm] = await Promise.all([
+    optionalImport('@deepseek-ai/cordis'),
+    optionalImport('@deepseek-ai/dsh-tools'),
+    optionalImport('../lib/index.js'),
+    optionalImport('@deepseek-ai/dsh-llm')
+  ])
+  if (cordis?.Context === undefined || dshTools?.default === undefined || pluginModule === undefined) {
+    return t.skip(`the message channel for ${expected} needs cordis and dsh-tools`)
+  }
+
+  const tick = () => new Promise((resolve) => setImmediate(resolve))
+  const ctx = new cordis.Context()
+  // The host's own live-agent registry is what selects this channel; the fake
+  // agent records what the plugin queues, exactly like agent.inject() would.
+  const injected = []
+  const pending = []
+  const agent = {
+    id: 'compat-message-agent',
+    inject(message) {
+      injected.push(message)
+      pending.push(message)
+    },
+    inbox: {
+      get nextStep() { return pending },
+      nextTurn: [],
+      remove() { return false }
+    }
+  }
+  ctx.provide('agents', { list: () => [agent] })
+  // The real ToolRuntime injects `systemPrompt`; without it the registry never
+  // activates (and `tools` stays undefined).
+  ctx.provide('systemPrompt', { tools: () => () => undefined, section: () => () => undefined })
+  await ctx.plugin(dshTools.default)
+  const tools = ctx.get('tools')
+  assert.equal(typeof tools?.register, 'function', 'the real registry must expose register()')
+  for (const name of PASSIVE_TOOL_NAMES) tools.register(registration(name))
+
+  const fiber = await ctx.plugin(
+    {
+      name: pluginModule.name,
+      inject: pluginModule.inject,
+      Config: pluginModule.Config,
+      apply: pluginModule.apply
+    },
+    { mode: 'manager' }
+  )
+  await tick()
+
+  assert.equal(injected.length, 1, 'a session that already exists must be backfilled')
+  const message = injected[0]
+  // The message shape is the host's (`createUserMessage`), so this also proves
+  // the plugin does not have to hand-roll one.
+  assert.equal(message.role, 'user')
+  assert.equal(typeof message.id, 'string')
+  if (llm?.createUserMessage !== undefined) {
+    assert.equal(Object.isFrozen(message), true, 'the host factory freezes its messages')
+  }
+  // `kind` labels the row (contextProducer default) and `form` picks a supported
+  // presentation — this pair is what makes the injection its own chat entry,
+  // the way the workspace AGENTS.md chain appears.
+  assert.deepEqual(message.source, { kind: 'mcp-lazy', form: 'catalog' })
+  assert.equal(message.content.length, 1)
+  assert.equal(message.content[0].type, 'text')
+  assert.match(message.content[0].text, /## MCP 服务器/)
+
+  const service = ctx.get('mcpLazy')
+  if (service !== undefined) {
+    const snapshot = await service.snapshot()
+    assert.equal(snapshot.promptIndex.channel, 'message')
+    assert.equal(snapshot.promptIndex.name, 'mcp-lazy')
+    // The panel shows exactly what was queued for the agent.
+    assert.equal(snapshot.promptIndex.text, message.content[0].text)
+  }
+
+  await fiber.dispose?.()
+  await tick()
+})

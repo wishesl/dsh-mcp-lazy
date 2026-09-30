@@ -4,7 +4,7 @@
 
 一句话说明它的用途：**MCP 装得越多，模型每轮都要读取的工具说明就越多；这个插件会先把暂时用不到的工具说明藏起来，需要时再加载，从而减少 Token 消耗。**
 
-当前版本：`0.9.0`
+当前版本：`0.10.0`
 
 ## 它解决了什么问题
 
@@ -210,7 +210,7 @@ DSH 升级大版本后，建议先运行本仓库的兼容测试，再用于重�
 
 装的 MCP 越多，越难记住到底有哪些服务器、各自提供什么。插件在**设置**里注册了一个独立菜单（槽位 `settings.section`，条目 id `mcp-lazy`）；聊天里则直接能看到注入条目（见下一节）。
 
-- **注入的提示词（默认展开）**：运行时上下文条目 `mcp-lazy:index` 的**原文**（也就是聊天里那条「Current runtime context」消息中属于本插件的条目），可一键复制，并标注渠道、order 与「何时未注入」（`promptIndex: false` / 宿主无 `systemPrompt.context()` / 当前无受管服务器）。
+- **注入的提示词（默认展开）**：真正注入的那段**原文**（与聊天里那条独立注入记录逐字相同），可一键复制，并标注通道（会话消息 / 运行时上下文 / 提示词段）与「何时未注入」（`promptIndex: false` / 宿主缺通道 / 当前无受管服务器）。
 - **自定义描述与关键词**：每张服务器卡片上有「自定义描述」，编辑后**保存**即写入 profile，下一轮装配生效；「恢复默认」删除覆盖，回到从 MCP 定义派生的结果。字段来源会标成「面板自定义 / 配置文件固定 / 自动派生」。
 - 每个受管服务器的名称、工具数、**路由关键词**与可选描述；
 - 展开后是它的工具清单（名称 + 描述，描述截断到 300 字符）；
@@ -229,27 +229,26 @@ DSH 升级大版本后，建议先运行本仓库的兼容测试，再用于重�
 
 ## 提示词索引：注入什么，聊天里就看得到
 
-装配时，插件通过 `systemPrompt.context()` 把 MCP 索引注册成一条**具名运行时上下文**（名字 `mcp-lazy:index`，order 130）—— 和根目录 `AGENTS.md` 走的是**同一条通道**：
+装配时，插件通过 **`agent.inject()`** 把 MCP 索引作为**一条独立的会话消息**塞进每次请求（`source: { kind: 'mcp-lazy', form: 'catalog' }`）—— 这正是根目录 `AGENTS.md` 的注入方式，所以它会在**聊天消息流里单独成条**：
 
 ```text
 ## MCP 服务器（按需加载）
 
 以下 MCP 服务器的工具默认不在工具表里。需要时调用 `mcp__router__search_and_activate`：带 `query`（能力关键词）或 `serverName`（精确指定服务器名）；披露后当轮即可直接调用。
 
-- chrome-devtools（30 个工具）: devtools, console, network, performance, lighthouse
-- context7（2 个工具）: docs, library, query
-- playwright（25 个工具）: browser, navigate, click, screenshot, page
-- tavily（5 个工具）: search, extract, crawl, map, research
+- chrome-devtools（30 个工具）: page, performance, get, list, take, fill, snapshot, trace
+- context7（2 个工具）: library, query, org, project, format, name, score, version
+- playwright（25 个工具）: browser, page, network, snapshot, navigate, screenshot, close, drop
+- tavily（5 个工具）: research, crawl, extract, map, search, content, urls, information
 ```
 
-**所以你在聊天消息流里就能看到它**：DSH 会把运行时上下文拼成那条 `Current runtime context …` 消息，并且**按贡献者名字保留每个条目**（`renderContextSections()`），会话里因此有一条归属于 `mcp-lazy:index` 的条目 —— 与 AGENTS.md 的注入条目同样的呈现方式，不需要打开设置、也不需要翻系统提示词。
-
-- **面板「注入的提示词」显示的就是这条条目的原文**（同一个求值函数，不重新推导），并标注渠道（运行时上下文 / 提示词段）。
-- 老宿主若没有 `systemPrompt.context()`，插件自动退回**提示词段**（注入仍然生效，只是不会在消息流里单独成条）；两者都不会重复注入 —— 真宿主用例断言了「用 context 时 section 数量为 0」。
+- **为什么是消息而不是别的**：Chat 客户端（`conversation-nodes/message.js`）会把**每一条**「user 角色、但不是用户亲手提交」的消息渲染成独立的 `context` 条目，标签由 `source.kind` 决定、展示形式由 `source.form` 决定（`catalog` 是宿主支持的形式之一）；AGENTS.md 就是这么出现的。而 `systemPrompt.context()` 会被拼进同一条 `Current runtime context` 快照消息里，和沙箱/审批等条目挤在一起，看不出「MCP 注入」这条独立记录。
+- **不会打断对话**：`agent.inject` 的语义是「排到下一次 pre-step，**不唤醒驱动器**」；空闲会话把它挂起到下次唤醒。挂载时还会**回填已存在的会话**，老会话的下一次请求也带上索引。
+- 索引变化（工具目录变动、面板保存）会**重新排入**：同一文本不会重复排；旧的待消费副本先移除，已进入历史的旧条目保留（与 AGENTS.md 的替换语义一致）。
+- **通道优先级与降级**：消息通道（宿主有 `agents` 服务）→ 运行时上下文（`systemPrompt.context`）→ 提示词段（`systemPrompt.section`）。三者互斥、绝不重复注入；面板「注入的提示词」会标明当前走哪条通道，以及「会话里看哪条」。
 - **关键词与描述默认全部从 MCP 定义派生**（服务器名、`routingHints`、工具名、工具描述），与路由器打分**同源** —— 面板里看到的、注入的就是路由真正搜索的东西，因此无需人工维护清单。
 - 需要中文别名或更贴切的用途说明时，直接在面板里编辑，或用 `serverProfiles` 覆盖；派生结果始终兜底。两者都会参与路由匹配。
-- 文本是「目录签名 + 有效配置」的纯函数并做了缓存：注册表不变时**逐字节相同**（对 prompt cache 友好），保存后下一轮装配重算；没有任何受管服务器时返回空串、零成本。
-- 工具变化（`tools/change`）后签名变化会自然重算；新会话、新 agent 各自装配时都会拿到最新版本。
+- 文本是「目录签名 + 有效配置」的纯函数并做了缓存：注册表不变时**逐字节相同**（对 prompt cache 友好），保存后下一轮装配重算；没有任何受管服务器时**什么都不注入**、零成本。
 
 ## 配置
 

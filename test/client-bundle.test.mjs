@@ -138,9 +138,9 @@ const SNAPSHOT = {
   passthrough: [],
   promptIndex: {
     enabled: true,
-    channel: 'context',
-    name: 'mcp-lazy:index',
-    order: 130,
+    channel: 'message',
+    name: 'mcp-lazy',
+    order: null,
     locale: 'zh',
     reason: '',
     text: PROMPT_TEXT
@@ -269,10 +269,10 @@ test('the panel renders servers, tools, the injected prompt and the footer', asy
   // Requirement: the exact text that enters the model context is visible.
   assert.match(text, /data-mcp-lazy-prompt-index/)
   assert.match(text, /## MCP 服务器（按需加载）/)
-  assert.match(text, /mcp-lazy:index/)
-  assert.match(text, /order 130/)
-  // The runtime-context channel is the one that shows up in the conversation, so
-  // the panel says where to look for the same entry.
+  // The channel decides the promise the panel makes: a message channel means a
+  // real row of its own in the conversation (the AGENTS.md shape).
+  assert.match(text, /独立会话条目/)
+  assert.match(text, /mcp-lazy/)
   assert.match(text, /会话里看/)
   // The editor is behind a per-server toggle, so it is absent until opened.
   assert.doesNotMatch(text, /data-mcp-lazy-editor/)
