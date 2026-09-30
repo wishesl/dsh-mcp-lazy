@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url'
 import * as passiveToolProvider from './fixtures/passive-tool-provider.mjs'
 
 const execute = promisify(execFile)
-const loader = fileURLToPath(new URL('./fixtures/dsh-peer-loader.mjs', import.meta.url))
+// `--import` wants a module specifier (a file URL keeps Windows drive letters
+// out of URL parsing), while the main entry must stay a filesystem path.
+const hooks = new URL('./fixtures/dsh-peer-hooks.mjs', import.meta.url).href
 const harness = fileURLToPath(new URL('./fixtures/plugin-host-harness.mjs', import.meta.url))
 
 test('passive browser fixture declares its DSH tools dependency', () => {
@@ -17,7 +19,7 @@ test('passive browser fixture declares its DSH tools dependency', () => {
 test('plugin apply lifecycle keeps real MCP fixture connections warm', async () => {
   const { stdout } = await execute(process.execPath, [
     '--no-warnings',
-    '--experimental-loader', loader,
+    '--import', hooks,
     harness
   ], { timeout: 45000 })
 

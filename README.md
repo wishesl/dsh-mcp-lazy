@@ -4,7 +4,7 @@
 
 一句话说明它的用途：**MCP 装得越多，模型每轮都要读取的工具说明就越多；这个插件会先把暂时用不到的工具说明藏起来，需要时再加载，从而减少 Token 消耗。**
 
-当前版本：`0.5.1`
+当前版本：`0.6.0`
 
 ## 它解决了什么问题
 
@@ -187,7 +187,11 @@ dsh plugin --profile web add @yilinxiao/dsh-mcp-lazy
 
 ## 兼容性
 
-已经测试的 DSH 版本：`0.1.0-rc.6、0.1.0-rc.7 和 0.1.0-rc.8`。
+已经测试的 DSH 版本：`0.1.0-rc.6、0.1.0-rc.7、0.1.0-rc.8、0.2.0-rc.1 和 0.2.0-rc.2`。
+
+`peerDependencies` 声明的走廊是 `>=0.1.0-rc.6 <0.3.0`（`@deepseek-ai/dsh-tools` 与 `@deepseek-ai/dsh-subprocess`）。注意 0.1 线用 `^0.1.0-rc.6` 会**排除整个 0.2 线**：0.2 线（如 `0.2.0-rc.2`）虽然同样提供 `tools.register/schemas/get/restrict`、`tools/change`、`agent/created`、`agent/turn-stopping`、`agent/disposed` 与 `scrubbedParentEnv`，但它的 harness 包之间是**精确锁版**的，跨线混装会对不上。
+
+在 `0.2.0-rc.2` 上，接管路径是按真实宿主验证的：挂载真实的 `@deepseek-ai/cordis` + 真实 `ToolService`、注册真实的 `mcp__*` 工具、再经真实 agent scope 的 `ctx.tools.restrict({ deny })`，结果是该会话只看到 `mcp__router__search_and_activate`、其他 MCP 工具被隐藏、全局目录不受影响、卸载后全部恢复。对应的真实宿主用例在 `test/dsh-version-compat.test.mjs`，由 `dsh-compat` 矩阵逐版本执行。
 
 插件实际通过 DSH 是否提供所需能力来决定能否启用，而不是只看版本号。如果缺少工具目录读取、工具查询或按会话隐藏工具等能力，插件不会施加全局限制。
 

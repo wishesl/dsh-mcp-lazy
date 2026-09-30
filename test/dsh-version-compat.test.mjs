@@ -3,6 +3,37 @@ import { createRequire } from 'node:module'
 import test from 'node:test'
 
 const require = createRequire(import.meta.url)
+const ROUTER_TOOL_NAME = 'mcp__router__search_and_activate'
+const PASSIVE_TOOL_NAMES = ['mcp__alpha__echo', 'mcp__beta__search']
+
+/** One registry-ready passive MCP tool: the same shape mcp-client and this plugin register. */
+function registration(name) {
+  return {
+    name,
+    description: `passive fixture ${name}`,
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+    output: {
+      schema: {
+        type: 'object',
+        properties: { content: { type: 'array', items: {} } },
+        required: ['content'],
+        additionalProperties: false
+      },
+      render: () => [{ type: 'text', text: 'ok' }]
+    },
+    execute: async () => ({ content: [{ type: 'text', text: 'ok' }] })
+  }
+}
+
+/** Import a host package, or undefined when the matrix row does not ship it. */
+async function optionalImport(specifier) {
+  try {
+    return await import(specifier)
+  } catch (error) {
+    if (error?.code === 'ERR_MODULE_NOT_FOUND') return undefined
+    throw error
+  }
+}
 
 test('plugin imports host-owned peers for the requested DSH version', async (t) => {
   const expected = process.env.DSH_COMPAT_VERSION
@@ -106,4 +137,88 @@ test('plugin imports host-owned peers for the requested DSH version', async (t) 
   assert.ok(visibleNames().includes('mcp__passive__echo'))
   disposePassive()
   assert.equal(definitions.size, 0)
+})
+
+test('real host: manager mode hides compatible MCP tools through the real registry', async (t) => {
+  const expected = process.env.DSH_COMPAT_VERSION
+  if (!expected) return t.skip('DSH_COMPAT_VERSION is only set by compatibility CI')
+
+  // The stub-host test above proves the plugin's own logic; this one proves the
+  // host contract it depends on: a REAL cordis Context, the REAL ToolService,
+  // and the REAL agent-scope restrict() the universal manager calls.
+  const [cordis, dshTools, dshScope, pluginModule] = await Promise.all([
+    optionalImport('@deepseek-ai/cordis'),
+    optionalImport('@deepseek-ai/dsh-tools'),
+    optionalImport('@deepseek-ai/dsh-scope'),
+    // The plugin itself imports its host peers, so it stays a lazy import:
+    // without them this module must still load and skip.
+    optionalImport('../lib/index.js')
+  ])
+  if (cordis === undefined || dshTools === undefined || dshScope === undefined || pluginModule === undefined) {
+    return t.skip(`real host packages for ${expected} do not ship the registry/scope surface`)
+  }
+  const Context = cordis.Context
+  const ToolRuntime = dshTools.default
+  const { createScope, scopeOf } = dshScope
+  if (typeof Context !== 'function' || typeof ToolRuntime !== 'function' || typeof createScope !== 'function') {
+    return t.skip(`real host packages for ${expected} do not expose the registry/scope constructors`)
+  }
+
+  const tick = () => new Promise((resolve) => setImmediate(resolve))
+  const visibleFor = (tools, scopeKey) => tools.schemas(scopeKey).map(schema => schema.name).sort()
+
+  const ctx = new Context()
+  // The real ToolRuntime injects `systemPrompt`; this stub keeps the test on the
+  // registry surface only, so no prompt assembly is needed.
+  ctx.provide('systemPrompt', { tools: () => () => undefined, section: () => () => undefined })
+  await ctx.plugin(ToolRuntime)
+
+  const tools = ctx.get('tools')
+  assert.equal(typeof tools?.register, 'function', 'the real registry must expose register()')
+  assert.equal(typeof tools?.restrict, 'function', 'the real registry must expose restrict()')
+
+  // The plugin's own registration shape (raw parameters + output.schema) must be
+  // accepted by the real register(), which validates output.schema.
+  for (const name of PASSIVE_TOOL_NAMES) tools.register(registration(name))
+  assert.deepEqual(visibleFor(tools, undefined), [...PASSIVE_TOOL_NAMES].sort())
+
+  const fiber = await ctx.plugin(
+    {
+      name: pluginModule.name,
+      inject: pluginModule.inject,
+      Config: pluginModule.Config,
+      apply: pluginModule.apply
+    },
+    { mode: 'manager' }
+  )
+  await tick()
+  assert.deepEqual(visibleFor(tools, undefined), [...PASSIVE_TOOL_NAMES, ROUTER_TOOL_NAME].sort())
+
+  // Mint the agent scope the way the host does, then let the manager reconcile it.
+  let scope
+  ctx.inject(['tools'], (scopedCtx) => {
+    scope = createScope(scopedCtx, { compatAgent: expected })
+  })
+  await tick()
+  assert.ok(scope !== undefined, 'an agent scope must be mintable under a tools-injected context')
+  const scopeKey = scopeOf(scope.ctx)
+  assert.ok(scopeKey !== undefined, 'the minted context must carry a scope key')
+
+  ctx.emit('agent/created', { agent: { id: 'compat-agent', ctx: scope.ctx } })
+  await tick()
+  assert.deepEqual(
+    visibleFor(tools, scopeKey),
+    [ROUTER_TOOL_NAME],
+    'the agent must see only the router while compatible MCP tools stay hidden'
+  )
+  assert.deepEqual(
+    visibleFor(tools, undefined),
+    [...PASSIVE_TOOL_NAMES, ROUTER_TOOL_NAME].sort(),
+    'the global catalog must stay untouched'
+  )
+
+  await fiber.dispose?.()
+  await scope.dispose?.()
+  await tick()
+  assert.deepEqual(visibleFor(tools, undefined), [...PASSIVE_TOOL_NAMES].sort())
 })

@@ -2,13 +2,21 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-test('GitHub Actions verifies the promised Node and DSH compatibility matrices', async () => {
-  const workflow = await readFile(new URL('../.github/workflows/test.yml', import.meta.url), 'utf8')
+// Normalize line endings: a Windows checkout (core.autocrlf=true) delivers CRLF,
+// which would break every `\n`-anchored assertion below for reasons that have
+// nothing to do with the workflow itself.
+const workflow = (
+  await readFile(new URL('../.github/workflows/test.yml', import.meta.url), 'utf8')
+).replace(/\r\n/g, '\n')
 
+test('GitHub Actions verifies the promised Node and DSH compatibility matrices', async () => {
   assert.match(workflow, /actions\/checkout@v4/)
   assert.match(workflow, /actions\/setup-node@v4/)
   assert.match(workflow, /node-version:\s*\[20,\s*24\]/)
-  assert.match(workflow, /dsh-version:\s*\[0\.1\.0-rc\.6,\s*0\.1\.0-rc\.7,\s*0\.1\.0-rc\.8\]/)
+  assert.match(
+    workflow,
+    /dsh-version:\s*\[0\.1\.0-rc\.6,\s*0\.1\.0-rc\.7,\s*0\.1\.0-rc\.8,\s*0\.2\.0-rc\.1,\s*0\.2\.0-rc\.2\]/
+  )
   assert.match(workflow, /run:\s*npm ci --legacy-peer-deps --ignore-scripts/)
   assert.match(
     workflow,

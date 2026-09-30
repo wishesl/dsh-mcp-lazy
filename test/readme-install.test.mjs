@@ -2,8 +2,13 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8')
-const bundlePatch = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+// Normalize line endings: a Windows checkout (core.autocrlf=true) delivers CRLF,
+// which would break the multi-line assertions below.
+const read = async (path) =>
+  (await readFile(new URL(path, import.meta.url), 'utf8')).replace(/\r\n/g, '\n')
+
+const readme = await read('../README.md')
+const bundlePatch = await read('../cordis.patch.yml')
 
 test('README installs the package from the npm owner scope', () => {
   assert.match(readme, /dsh plugin --profile web add @yilinxiao\/dsh-mcp-lazy/)
@@ -19,7 +24,7 @@ test('bundle enables exactly one universal manager entry', () => {
 
 test('README explains universal takeover boundaries and safe opt-out', () => {
   for (const text of [
-    '0.5.1',
+    '0.6.0',
     'mode: manager',
     'mcp-lazy-manager',
     '兼容性准入',
@@ -27,7 +32,8 @@ test('README explains universal takeover boundaries and safe opt-out', () => {
     'fail-open',
     'Schema 按需披露',
     '连接层懒加载',
-    '0.1.0-rc.6、0.1.0-rc.7 和 0.1.0-rc.8'
+    '0.1.0-rc.6、0.1.0-rc.7、0.1.0-rc.8、0.2.0-rc.1 和 0.2.0-rc.2',
+    '>=0.1.0-rc.6 <0.3.0'
   ]) assert.match(readme, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   assert.match(readme, /\| 显式 `dsh-mcp-lazy` server \|/)
   assert.match(readme, /\| 通过兼容性准入的其他 DSH MCP \|/)

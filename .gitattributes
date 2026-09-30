@@ -1,0 +1,4 @@
+# Keep the working tree LF on every platform: several tests assert on `\n`
+# anchored text in README.md, cordis.patch.yml, and the workflow file, and a
+# CRLF checkout (Windows + core.autocrlf=true) would fail them spuriously.
+* text=auto eol=lf
