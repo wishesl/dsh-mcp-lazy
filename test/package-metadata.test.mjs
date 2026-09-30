@@ -15,9 +15,9 @@ const bundlePatch = await read('../cordis.patch.yml')
 
 test('package metadata publishes the installable bundle from the npm owner scope', () => {
   assert.equal(pkg.name, '@yilinxiao/dsh-mcp-lazy')
-  assert.equal(pkg.version, '0.11.0')
-  assert.equal(lock.version, '0.11.0')
-  assert.equal(lock.packages[''].version, '0.11.0')
+  assert.equal(pkg.version, '0.11.1')
+  assert.equal(lock.version, '0.11.1')
+  assert.equal(lock.packages[''].version, '0.11.1')
   assert.equal(pkg.repository.url, 'git+https://github.com/wishesl/dsh-mcp-lazy.git')
   assert.equal(pkg.homepage, 'https://github.com/wishesl/dsh-mcp-lazy#readme')
   assert.equal(pkg.bugs.url, 'https://github.com/wishesl/dsh-mcp-lazy/issues')
@@ -113,10 +113,19 @@ test('the write invocations accept a well-formed profile and reject a malformed 
   assert.deepEqual(saveParse({ serverName: 'playwright', description: '浏览器', keywords: ['浏览器'] }), {
     serverName: 'playwright',
     description: '浏览器',
-    keywords: ['浏览器'],
-    pinned: undefined
+    keywords: ['浏览器']
   })
-  assert.deepEqual(saveParse({ serverName: 'playwright' }), { serverName: 'playwright', description: undefined, keywords: undefined, pinned: undefined })
+  assert.deepEqual(saveParse({ serverName: 'playwright' }), { serverName: 'playwright' })
+  // Regression: the gateway runs assertJsonValue() over the decoded value, and a
+  // present-but-undefined property is not JSON-safe ("undefined is not JSON-safe").
+  // Returning `{ description: undefined }` therefore failed EVERY panel save with
+  // `gateway/input-invalid: wire field "input" failed boundary validation`.
+  for (const parsed of [saveParse({ serverName: 'x' }), saveParse({ serverName: 'x', pinned: false })]) {
+    assert.ok(
+      Object.values(parsed).every(entry => entry !== undefined),
+      `absent fields must stay absent: ${JSON.stringify(parsed)}`
+    )
+  }
   // 常驻/收起 是布尔开关；写错类型要在网关前就被拒。
   assert.equal(saveParse({ serverName: 'playwright', pinned: true }).pinned, true)
   assert.throws(() => saveParse({ serverName: 'playwright', pinned: 'yes' }), /pinned must be a boolean/)
