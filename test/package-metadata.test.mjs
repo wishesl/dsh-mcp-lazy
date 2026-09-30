@@ -15,9 +15,9 @@ const bundlePatch = await read('../cordis.patch.yml')
 
 test('package metadata publishes the installable bundle from the npm owner scope', () => {
   assert.equal(pkg.name, '@yilinxiao/dsh-mcp-lazy')
-  assert.equal(pkg.version, '0.7.0')
-  assert.equal(lock.version, '0.7.0')
-  assert.equal(lock.packages[''].version, '0.7.0')
+  assert.equal(pkg.version, '0.8.0')
+  assert.equal(lock.version, '0.8.0')
+  assert.equal(lock.packages[''].version, '0.8.0')
   assert.equal(pkg.repository.url, 'git+https://github.com/wishesl/dsh-mcp-lazy.git')
   assert.equal(pkg.homepage, 'https://github.com/wishesl/dsh-mcp-lazy#readme')
   assert.equal(pkg.bugs.url, 'https://github.com/wishesl/dsh-mcp-lazy/issues')
@@ -68,13 +68,29 @@ test('the Typert manifest is owned by this package and carries strict codecs', (
   assert.ok(Array.isArray(TYPERT.schemas) && TYPERT.schemas.length === 0)
   assert.ok(Array.isArray(TYPERT.invocations) && TYPERT.invocations.length > 0)
   assert.deepEqual(Object.keys(TYPERT.model).sort(), ['events', 'objects', 'services'])
+  const methods = []
   for (const invocation of TYPERT.invocations) {
+    methods.push(invocation.method)
     for (const key of ['id', 'service', 'namespace', 'method']) {
       assert.equal(typeof invocation[key], 'string', `invocation.${key} must be a string`)
       assert.ok(invocation[key].length > 0, `invocation.${key} must not be empty`)
     }
-    assert.deepEqual(invocation.parameters, [])
     assert.equal(invocation.invocation.kind, 'direct')
+    // Parameters mirror the loader's requireInvocation: unique wire names, an
+    // explicit `json` source, and a strict codec of their own — the panel's two
+    // write methods carry an argument, which the manifest must describe.
+    const wires = new Set()
+    for (const parameter of invocation.parameters) {
+      assert.equal(typeof parameter.name, 'string', `invocation "${invocation.method}" parameter name must be a string`)
+      assert.equal(typeof parameter.wire, 'string', `invocation "${invocation.method}" parameter wire must be a string`)
+      assert.ok(!wires.has(parameter.wire), `invocation "${invocation.method}" repeats wire field "${parameter.wire}"`)
+      wires.add(parameter.wire)
+      assert.equal(parameter.source, 'json', `invocation "${invocation.method}" parameter source must be json`)
+      assert.equal(parameter.lookup, undefined, `invocation "${invocation.method}" JSON parameter must not declare a lookup`)
+      assert.equal(parameter.codec.mode, 'strict', `invocation "${invocation.method}" parameter codec must be strict`)
+      assert.equal(typeof parameter.codec.typeSymbol, 'string')
+      assert.equal(typeof parameter.codec.create().parse, 'function')
+    }
     // The loader rejects anything but a strict codec; `src-json` is refused.
     assert.equal(invocation.result.mode, 'strict')
     assert.equal(typeof invocation.result.typeSymbol, 'string')
@@ -84,6 +100,28 @@ test('the Typert manifest is owned by this package and carries strict codecs', (
     assert.ok(Number.isInteger(invocation.sourceLocation.line) && invocation.sourceLocation.line >= 1)
     assert.ok(Number.isInteger(invocation.sourceLocation.column) && invocation.sourceLocation.column >= 1)
   }
+  // The panel reads the catalog, shows the injected prompt, and writes overrides.
+  assert.deepEqual([...methods].sort(), ['resetProfile', 'saveProfile', 'snapshot'])
+})
+
+test('the write invocations accept a well-formed profile and reject a malformed one', () => {
+  const save = TYPERT.invocations.find(invocation => invocation.method === 'saveProfile')
+  const reset = TYPERT.invocations.find(invocation => invocation.method === 'resetProfile')
+  const saveParse = save.parameters[0].codec.create().parse
+  const resetParse = reset.parameters[0].codec.create().parse
+
+  assert.deepEqual(saveParse({ serverName: 'playwright', description: '浏览器', keywords: ['浏览器'] }), {
+    serverName: 'playwright',
+    description: '浏览器',
+    keywords: ['浏览器']
+  })
+  assert.deepEqual(saveParse({ serverName: 'playwright' }), { serverName: 'playwright', description: undefined, keywords: undefined })
+  assert.throws(() => saveParse({ serverName: '' }), /serverName must be a non-empty string/)
+  assert.throws(() => saveParse({ serverName: 'x', keywords: ['ok', 7] }), /every keyword must be a string/)
+  assert.throws(() => saveParse(null), /input must be an object/)
+
+  assert.deepEqual(resetParse({ serverName: 'tavily' }), { serverName: 'tavily' })
+  assert.throws(() => resetParse({}), /serverName must be a non-empty string/)
 })
 
 test('package discovery metadata exposes the MCP token-saving use case', () => {

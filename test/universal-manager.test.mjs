@@ -6,7 +6,8 @@ import { installUniversalManager } from '../lib/universal-manager.js'
 import {
   ROUTER_TOOL_NAME,
   registerRouterCompatibleTool,
-  registerRouterServer
+  registerRouterServer,
+  selectRoute
 } from '../lib/tool-router.js'
 
 function eagerTool(name, description = name, execute = async () => ({ content: [] })) {
@@ -813,4 +814,55 @@ test('cleanup attempts every disposer and throws AggregateError after listener c
   assert.equal(host.counters.listenerDisposals, 4)
   assert.equal(host.definitions.has(ROUTER_TOOL_NAME), false)
   assert.doesNotThrow(disposeManager)
+})
+
+test('panel-authored aliases reach routing through a live hints source', async () => {
+  const host = createHost()
+  const adapter = createUniversalDshAdapter(host.ctx)
+  let controller
+  let hints = []
+  const disposeManager = installUniversalManager(adapter, {
+    hintsOf: (serverName) => (serverName === 'alpha' ? hints : []),
+    onReady: (ready) => { controller = ready }
+  })
+  host.register(eagerTool('mcp__alpha__echo', 'echo alpha'))
+  host.emit('tools/change')
+
+  const entries = () => controller.currentCatalog().entries
+  assert.equal(entries().length, 1)
+  assert.deepEqual(entries()[0].routingHints(), [], 'the manager starts with no authored hints')
+  // A Chinese alias the model read in the prompt matches nothing yet...
+  assert.equal(selectRoute(entries(), { query: '阿尔法' }).entry, undefined)
+
+  // ...and matches on the very next query after a save, with no restart and no
+  // re-registration: this is why the hint is a function, not a snapshot.
+  hints = ['阿尔法', 'alpha-echo']
+  const routed = selectRoute(entries(), { query: '阿尔法' })
+  assert.equal(routed.entry.serverName, 'alpha')
+
+  // The route is real: the router tool discloses that server to the agent.
+  const agent = host.createAgent('agent')
+  host.emit('agent/created', { agent })
+  const result = await host.call(agent, ROUTER_TOOL_NAME, { query: '阿尔法' })
+  assert.match(result.content[0].text, /alpha/)
+  assert.match(result.content[0].text, /已披露/)
+
+  disposeManager()
+})
+
+test('a throwing hints source degrades to the server name instead of breaking the router', () => {
+  const host = createHost()
+  const adapter = createUniversalDshAdapter(host.ctx)
+  let controller
+  const disposeManager = installUniversalManager(adapter, {
+    hintsOf: () => { throw new Error('store exploded') },
+    onReady: (ready) => { controller = ready }
+  })
+  host.register(eagerTool('mcp__alpha__echo', 'echo alpha'))
+  host.emit('tools/change')
+
+  const entry = controller.currentCatalog().entries[0]
+  assert.deepEqual(entry.routingHints(), [])
+  assert.equal(selectRoute([entry], { query: 'alpha' }).entry.serverName, 'alpha')
+  disposeManager()
 })

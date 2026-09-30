@@ -2,12 +2,19 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  MAX_OVERRIDE_DESCRIPTION_CHARS,
+  MAX_OVERRIDE_KEYWORDS,
   buildIndexText,
+  buildPanelSnapshot,
   buildServerViews,
   buildSnapshot,
   deriveKeywords,
   indexSignatureKey,
-  splitTokens
+  mergeServerProfiles,
+  normalizeProfile,
+  routingHintsOf,
+  splitTokens,
+  withServerOverrides
 } from '../lib/mcp-view.js'
 
 const PLAYWRIGHT = {
@@ -105,4 +112,119 @@ test('snapshot caps tool payload and keeps passthrough names sorted', () => {
   assert.deepEqual(snapshot.passthrough.map(entry => entry.name), ['mcp__alpha__y', 'mcp__zeta__x'])
   assert.equal(snapshot.generatedAt, 1700000000000)
   assert.equal(snapshot.routerTool, 'mcp__router__search_and_activate')
+})
+
+test('normalizeProfile keeps only what the injected index can render', () => {
+  // One line per server: a multi-line description would break the list.
+  assert.deepEqual(normalizeProfile({ description: '  第一行\n第二行\t  ' }), { description: '第一行 第二行' })
+  assert.deepEqual(normalizeProfile({ keywords: [' 浏览器 ', '浏览器', '', '  ', '截图'] }), { keywords: ['浏览器', '截图'] })
+  // Non-strings, empty boxes and wrong shapes mean "no override", not an error.
+  assert.equal(normalizeProfile({ description: '   ', keywords: [] }), undefined)
+  assert.equal(normalizeProfile({ keywords: [7, null] }), undefined)
+  assert.equal(normalizeProfile(null), undefined)
+  assert.equal(normalizeProfile('nope'), undefined)
+  assert.equal(normalizeProfile([]), undefined)
+  // Bounds are enforced here, so the store and the config cannot inject junk.
+  const long = normalizeProfile({ description: 'x'.repeat(MAX_OVERRIDE_DESCRIPTION_CHARS + 50) })
+  assert.equal(long.description.length, MAX_OVERRIDE_DESCRIPTION_CHARS)
+  const many = normalizeProfile({ keywords: Array.from({ length: MAX_OVERRIDE_KEYWORDS + 10 }, (_, index) => `k${index}`) })
+  assert.equal(many.keywords.length, MAX_OVERRIDE_KEYWORDS)
+})
+
+test('mergeServerProfiles prefers the config per field and names the winner', () => {
+  const config = { playwright: { description: '来自 YAML' } }
+  const store = { playwright: { description: '来自面板', keywords: ['浏览器'] }, tavily: { keywords: ['搜索'] } }
+  const merged = mergeServerProfiles(config, store)
+
+  // The hand-written YAML wins the field it sets; the panel keeps the one it owns.
+  assert.deepEqual(merged.profiles.playwright, { description: '来自 YAML', keywords: ['浏览器'] })
+  assert.deepEqual(merged.origins.playwright, { description: 'config', keywords: 'custom' })
+  // A server only the panel knows about is still an override, and vice versa.
+  assert.deepEqual(merged.profiles.tavily, { keywords: ['搜索'] })
+  assert.deepEqual(merged.origins.tavily, { description: null, keywords: 'custom' })
+  // Normalization runs on both writers: a blank config entry never wins.
+  assert.deepEqual(mergeServerProfiles({ x: { description: '  ' } }, { x: { description: '面板' } }).origins.x, {
+    description: 'custom',
+    keywords: null
+  })
+})
+
+test('withServerOverrides feeds the panel view and the injected index', () => {
+  const config = { keywordsPerServer: 8 }
+  const store = { playwright: { description: '浏览器自动化：导航/点击', keywords: ['浏览器', '网页自动化'] } }
+  const effective = withServerOverrides(config, store)
+  const server = buildServerViews([PLAYWRIGHT], effective)[0]
+
+  assert.equal(server.description, '浏览器自动化：导航/点击')
+  assert.deepEqual(server.keywords.slice(0, 2), ['浏览器', '网页自动化'])
+  assert.ok(server.keywords.includes('browser'), 'derived keywords stay as the fallback tail')
+  // The editor is fed the effective override, never the capped/derived list.
+  assert.deepEqual(server.override, { description: '浏览器自动化：导航/点击', keywords: ['浏览器', '网页自动化'] })
+  assert.deepEqual(server.overrideSource, { description: 'custom', keywords: 'custom' })
+
+  const text = buildIndexText([server], effective)
+  assert.match(text, /浏览器自动化：导航\/点击/)
+  assert.match(text, /关键词：浏览器, 网页自动化/)
+  // A save changes the memo key, so the next assembly cannot reuse stale bytes.
+  const savedKey = indexSignatureKey('sig-1', withServerOverrides(config, store))
+  const otherKey = indexSignatureKey('sig-1', withServerOverrides(config, { playwright: { description: '改了' } }))
+  assert.notEqual(savedKey, otherKey)
+})
+
+test('routingHintsOf accepts a live source, plain arrays, and filters junk', () => {
+  assert.deepEqual(routingHintsOf({ routingHints: ['a', 7, 'b'] }), ['a', 'b'])
+  let hints = ['第一次']
+  const live = { routingHints: () => hints }
+  assert.deepEqual(routingHintsOf(live), ['第一次'])
+  // The point of the function shape: a later edit is visible without a restart.
+  hints = ['改了']
+  assert.deepEqual(routingHintsOf(live), ['改了'])
+  assert.deepEqual(routingHintsOf({ routingHints: () => 'nope' }), [])
+  assert.deepEqual(routingHintsOf({}), [])
+  // Keyword *derivation* stays ASCII-only by design (aliases belong in the panel
+  // or in serverProfiles — see the CJK test above), while an ASCII hint does
+  // contribute. The router scores the raw hint text either way, which is what
+  // makes an authored Chinese alias route on the real host (compat lane).
+  const derived = deriveKeywords({ ...PLAYWRIGHT, routingHints: () => ['浏览器', 'websocket'] })
+  assert.deepEqual(derived.filter(word => /[\u4e00-\u9fff]/.test(word)), [])
+  assert.ok(derived.includes('websocket'))
+})
+
+test('the snapshot carries the injected prompt verbatim and the store state', () => {
+  const surfaces = {
+    promptIndex: {
+      enabled: true,
+      sectionName: 'mcp-lazy:index',
+      order: 3150,
+      locale: 'zh',
+      reason: '',
+      text: '## MCP 服务器（按需加载）\n\n- playwright（3 个工具）: browser'
+    },
+    store: { persisted: true, file: 'C:\\p\\.dsh-mcp-lazy\\profiles.json', warning: null }
+  }
+  const catalog = { signature: 'sig-1', entries: [PLAYWRIGHT], passthrough: [] }
+  const snapshot = buildSnapshot(catalog, {}, 1700000000000, surfaces)
+  // Byte-for-byte: the panel shows the artifact, not a re-derivation of it.
+  assert.equal(snapshot.promptIndex.text, surfaces.promptIndex.text)
+  assert.equal(snapshot.promptIndex.order, 3150)
+  assert.deepEqual(snapshot.store, surfaces.store)
+  assert.deepEqual(snapshot.servers[0].override, { description: null, keywords: null })
+  assert.deepEqual(snapshot.servers[0].overrideSource, { description: null, keywords: null })
+
+  // Without a live surface the snapshot still answers the panel's questions.
+  const bare = buildSnapshot(catalog)
+  assert.equal(bare.promptIndex.enabled, false)
+  assert.equal(bare.promptIndex.reason, 'unavailable')
+  assert.equal(bare.promptIndex.text, '')
+  assert.equal(bare.store.persisted, false)
+})
+
+test('the panel payload reports availability instead of an empty list', () => {
+  const catalog = { signature: 'sig-1', entries: [PLAYWRIGHT], passthrough: [] }
+  assert.equal(buildPanelSnapshot(catalog, {}, 1700000000000).available, true)
+  // A host whose universal manager never installed: an explanation, not "no MCP".
+  assert.equal(buildPanelSnapshot({ signature: 'empty', entries: [], passthrough: [] }, {}).available, false)
+  // An installed manager that admitted nothing is still a working service: the
+  // panel then says "no takeover-eligible MCP server found", not "unavailable".
+  assert.equal(buildPanelSnapshot({ signature: 'manager:0', entries: [], passthrough: [] }, {}).available, true)
 })

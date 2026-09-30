@@ -32,6 +32,15 @@ jobs:
           cache: npm
       - run: npm ci --legacy-peer-deps --ignore-scripts
       - run: npm install --no-save --ignore-scripts @deepseek-ai/dsh@${{ matrix.dsh-version }} @deepseek-ai/dsh-tools@${{ matrix.dsh-version }} @deepseek-ai/dsh-subprocess@${{ matrix.dsh-version }}
+      # The optional surfaces the newer rows ship: the real system-prompt band
+      # lookup, the real agent scope, and the Typert pair behind the settings
+      # panel. `npm install --no-save` prunes anything the previous step left
+      # unlisted, so this step re-lists the mandatory three. Rows that predate
+      # these packages (0.1.x has no typert) fail here and keep step 1's state;
+      # the compat test skips the assertions it cannot run.
+      - name: Optional host surfaces (typert panel, system prompt, scope)
+        continue-on-error: true
+        run: npm install --no-save --ignore-scripts @deepseek-ai/dsh@${{ matrix.dsh-version }} @deepseek-ai/dsh-tools@${{ matrix.dsh-version }} @deepseek-ai/dsh-subprocess@${{ matrix.dsh-version }} @deepseek-ai/dsh-scope@${{ matrix.dsh-version }} @deepseek-ai/dsh-system-prompt@${{ matrix.dsh-version }} @deepseek-ai/dsh-typert-protocol@${{ matrix.dsh-version }} @deepseek-ai/dsh-typert-loader@${{ matrix.dsh-version }}
       - run: node --test test/dsh-version-compat.test.mjs
         env:
           DSH_COMPAT_VERSION: ${{ matrix.dsh-version }}

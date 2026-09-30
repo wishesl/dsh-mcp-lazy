@@ -314,3 +314,156 @@ test('real host: manager mode hides compatible MCP tools through the real regist
   await tick()
   assert.deepEqual(visibleFor(tools, undefined), [...PASSIVE_TOOL_NAMES].sort())
 })
+
+/** A throwaway profile directory: the anchor the panel store resolves. */
+async function tempProfileDirectory() {
+  const { mkdtemp, writeFile } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const dir = await mkdtemp(join(tmpdir(), 'mcp-lazy-compat-'))
+  await writeFile(join(dir, 'package.json'), '{}\n')
+  return dir
+}
+
+test('real host: the panel service shows the injected prompt and persists overrides', async (t) => {
+  const expected = process.env.DSH_COMPAT_VERSION
+  if (!expected) return t.skip('DSH_COMPAT_VERSION is only set by compatibility CI')
+
+  const [cordis, dshTools, protocol, systemPromptModule, pluginModule] = await Promise.all([
+    optionalImport('@deepseek-ai/cordis'),
+    optionalImport('@deepseek-ai/dsh-tools'),
+    optionalImport('@deepseek-ai/dsh-typert-protocol'),
+    optionalImport('@deepseek-ai/dsh-system-prompt'),
+    optionalImport('../lib/index.js')
+  ])
+  // The panel needs all four: the real Context, the real registry, the REAL
+  // TypertRemoteService base the service extends, and the real prompt service
+  // whose band lookup decides the section order.
+  if (
+    cordis?.Context === undefined ||
+    dshTools?.default === undefined ||
+    typeof protocol?.TypertRemoteService !== 'function' ||
+    typeof systemPromptModule?.default !== 'function' ||
+    pluginModule === undefined
+  ) {
+    return t.skip(`the settings panel surface for ${expected} needs cordis, dsh-tools, dsh-system-prompt and dsh-typert-protocol`)
+  }
+
+  const { readFile, rm } = await import('node:fs/promises')
+  const { join } = await import('node:path')
+  const tick = () => new Promise((resolve) => setImmediate(resolve))
+  const profileDir = await tempProfileDirectory()
+
+  const ctx = new cordis.Context()
+  // The Cordis config-tree anchor: in a real profile it is the directory whose
+  // node_modules holds this plugin, which is exactly where panel state belongs.
+  ctx.baseUrl = profileDir
+
+  try {
+    await ctx.plugin(systemPromptModule.default)
+    const systemPrompt = ctx.get('systemPrompt')
+    const capturedSections = []
+    const realSection = systemPrompt.section.bind(systemPrompt)
+    systemPrompt.section = (value) => {
+      capturedSections.push(value)
+      return realSection(value)
+    }
+
+    await ctx.plugin(dshTools.default)
+    const tools = ctx.get('tools')
+    for (const name of PASSIVE_TOOL_NAMES) tools.register(registration(name))
+
+    const fiber = await ctx.plugin(
+      {
+        name: pluginModule.name,
+        inject: pluginModule.inject,
+        Config: pluginModule.Config,
+        apply: pluginModule.apply
+      },
+      { mode: 'manager' }
+    )
+    await tick()
+
+    const service = ctx.get('mcpLazy')
+    assert.ok(service !== undefined, 'the Typert service must be reachable by its namespace')
+    for (const method of ['snapshot', 'saveProfile', 'resetProfile']) {
+      assert.equal(typeof service?.[method], 'function', `the panel needs ${method}()`)
+    }
+
+    const before = await service.snapshot()
+    assert.equal(before.available, true)
+    assert.equal(before.serverCount, PASSIVE_TOOL_NAMES.length)
+    assert.equal(before.promptIndex.enabled, true)
+    assert.equal(before.promptIndex.sectionName, 'mcp-lazy:index')
+    assert.equal(before.promptIndex.order, systemPrompt.getSectionOrder('MCP_SERVERS') + 50)
+    assert.match(before.promptIndex.text, /## MCP 服务器/)
+
+    // The panel's text is byte-identical to the section the model would receive.
+    const index = capturedSections.find(section => section.name === 'mcp-lazy:index')
+    assert.ok(index !== undefined, 'the plugin must register the prompt index section')
+    assert.equal(before.promptIndex.text, index.text())
+
+    // The panel store writes into the profile directory it resolved.
+    assert.equal(before.store.persisted, true)
+    assert.equal(before.store.file, join(profileDir, '.dsh-mcp-lazy', 'profiles.json'))
+    assert.equal(before.servers[0].override.description, null)
+
+    // Mint the agent scope so the router can disclose, like the host does.
+    const { createScope, scopeOf } = await import('@deepseek-ai/dsh-scope')
+    let scope
+    ctx.inject(['tools'], (scopedCtx) => {
+      scope = createScope(scopedCtx, { compatAgent: `panel-${expected}` })
+    })
+    await tick()
+    // The manager keys its agents by identity, so the router must be handed the
+    // same object the host announced.
+    const agent = { id: 'compat-panel-agent', ctx: scope.ctx }
+    ctx.emit('agent/created', { agent })
+    await tick()
+    const callRouter = (query) => tools
+      .get(ROUTER_TOOL_NAME, scopeOf(scope.ctx))
+      .execute({ query }, { agent, signal: new AbortController().signal })
+
+    // A Chinese alias matches nothing before the user authors one...
+    assert.match((await callRouter('阿尔法')).content[0].text, /未找到匹配/)
+
+    const saved = await service.saveProfile({
+      serverName: 'alpha',
+      description: '阿尔法回显服务',
+      keywords: ['阿尔法', 'echo']
+    })
+    const savedAlpha = saved.servers.find(server => server.serverName === 'alpha')
+    assert.equal(savedAlpha.override.description, '阿尔法回显服务')
+    assert.deepEqual(savedAlpha.override.keywords, ['阿尔法', 'echo'])
+    assert.deepEqual(savedAlpha.overrideSource, { description: 'custom', keywords: 'custom' })
+    assert.equal(saved.store.persisted, true)
+    // The injection and the section both moved to the new text.
+    assert.match(saved.promptIndex.text, /阿尔法回显服务/)
+    assert.equal(saved.promptIndex.text, index.text())
+    assert.notEqual(saved.promptIndex.text, before.promptIndex.text)
+    // ...and it is on disk, so a restart keeps it.
+    assert.deepEqual(
+      JSON.parse(await readFile(saved.store.file, 'utf8')).servers,
+      { alpha: { description: '阿尔法回显服务', keywords: ['阿尔法', 'echo'] } }
+    )
+    // ...and it routes: the alias the model read in the prompt now discloses alpha.
+    const routed = await callRouter('阿尔法')
+    assert.match(routed.content[0].text, /alpha/)
+    assert.match(routed.content[0].text, /已披露/)
+
+    // Resetting drops the override, the file entry and the routing alias.
+    const reset = await service.resetProfile({ serverName: 'alpha' })
+    assert.equal(reset.servers.find(server => server.serverName === 'alpha').override.description, null)
+    assert.deepEqual(JSON.parse(await readFile(reset.store.file, 'utf8')).servers, {})
+    assert.equal(reset.promptIndex.text, before.promptIndex.text)
+
+    // A bad argument is refused with a message the panel can show.
+    await assert.rejects(() => service.saveProfile({ serverName: '  ' }), /serverName is required/)
+
+    await fiber.dispose?.()
+    await scope?.dispose?.()
+    await tick()
+  } finally {
+    await rm(profileDir, { recursive: true, force: true })
+  }
+})
