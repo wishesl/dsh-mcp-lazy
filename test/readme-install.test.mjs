@@ -11,20 +11,20 @@ const readme = await read('../README.md')
 const bundlePatch = await read('../cordis.patch.yml')
 
 test('README installs the package from the npm owner scope', () => {
-  assert.match(readme, /dsh plugin --profile web add @yilinxiao\/dsh-mcp-lazy/)
+  assert.match(readme, /dsh plugin --profile web add @sutong12\/dsh-mcp-lazy/)
   assert.doesNotMatch(readme, /github:leaforbook\/dsh-mcp-lazy/)
   assert.doesNotMatch(readme, /@xiaoyilin\/dsh-mcp-lazy/)
 })
 
 test('bundle enables exactly one universal manager entry', () => {
   assert.equal([...bundlePatch.matchAll(/^    - id:/gm)].length, 1)
-  assert.match(bundlePatch, /^    - id: mcp-lazy-manager\n      name: '@yilinxiao\/dsh-mcp-lazy'\n      config:\n        mode: manager$/m)
+  assert.match(bundlePatch, /^    - id: mcp-lazy-manager\n      name: '@sutong12\/dsh-mcp-lazy'\n      config:\n        mode: manager$/m)
   assert.doesNotMatch(bundlePatch, /^\s*disabled:/m)
 })
 
 test('README explains universal takeover boundaries and safe opt-out', () => {
   for (const text of [
-    '0.11.1',
+    '0.12.0',
     'mode: manager',
     'mcp-lazy-manager',
     '兼容性准入',

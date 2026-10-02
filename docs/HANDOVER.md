@@ -3,7 +3,7 @@
 > 面向下一个接手的人（或下一个会话）。目标：不用重新推导，就能继续开发、验证、排障、回滚。
 > 仓库：`https://github.com/wishesl/dsh-mcp-lazy`（fork 自 `leaforbook/dsh-mcp-lazy`）
 > 本地克隆：`E:\gopackage2\2026-8\woker1\dsh-mcp-lazy-fork`
-> 当前版本：`0.10.0`（见 §3 与 §4 的装机步骤）
+> 当前版本：`0.12.0`（已发布 npm：`@sutong12/dsh-mcp-lazy`）
 
 ---
 
@@ -30,30 +30,32 @@ DSH 的 MCP 懒加载桥：把已连接的 MCP 工具**按会话隐藏**，只�
 | `c587384` | **修复面板 404**：`TYPERT.package` 用真实包名；codec 改 `strict`；Remote 服务改为 `apply` 内 await 挂载；加三道防回归（含真实 `validateTypertManifest`） |
 | `d1fc363` | **面板可见注入提示词 + 自定义描述（0.8.0）**：新增 `lib/profile-store.js`（profile 内 `.dsh-mcp-lazy/profiles.json`，原子写、fail-soft、无锚点则内存态）；`lib/wire.js` 增 `saveProfile`/`resetProfile` 两个**带 strict 参数 codec** 的调用；`lib/service.js` 从只读升级为读+写并回传 `promptIndex`/`store`；`lib/mcp-view.js` 增 `normalizeProfile`/`mergeServerProfiles`/`withServerOverrides`/`buildPanelSnapshot`/`routingHintsOf`；`lib/tool-router.js` + `lib/universal-manager.js` 让 `routingHints` 支持**函数源**（面板别名真正参与路由）；`lib/client.js` 增「注入的提示词」区块与逐服务器编辑器；新增 `test/profile-store.test.mjs` 并在 compat 车道加真宿主面板用例 |
 | `159107c` | **索引改走运行时上下文（0.9.0；实测仍被拼进同一条快照，0.10.0 改为消息通道）**：`lib/index.js` 由 `systemPrompt.section()` 改为 `systemPrompt.context({ name: 'mcp-lazy:index', order: getContextOrder('SUBAGENT_DELEGATION') + 10 })`；快照字段 `sectionName` → `name` 并新增 `channel`，两面 codec 同步；真宿主用例新增 `assemble().contexts` 与 `renderContextSnapshot()` 的逐字断言 |
-| `<待填：本次提交>` | **索引改为独立会话消息（0.10.0）**：新增 `lib/prompt-message.js` —— `agent.inject(createUserMessage({ content, source: { kind: 'mcp-lazy', form: 'catalog' } }))`，与根目录 AGENTS.md 同一机制，因而在聊天里**单独成条**；含挂载回填老会话、跟随 `agent/created`/`agent/disposed`、`tools/change` 与面板保存后重新排入、同文本去重、待消费副本先移除、无 `agents` 服务/无 `inject` 时 fail-soft；`lib/index.js` 通道优先级改为 **message → context → section**（互斥，绝不重复注入）；`lib/service.js` 写入后 `refreshPrompt()`；`lib/client.js` 按通道给文案；新增 `test/prompt-message.test.mjs` 与真宿主消息通道用例 |
+| `<0.10.0>` | **索引改为独立会话消息**：新增 `lib/prompt-message.js` —— `agent.inject(createUserMessage({ content, source: { kind: 'mcp-lazy', form: 'catalog' } }))`，与根目录 AGENTS.md 同一机制，因而在聊天里**单独成条**；含挂载回填老会话、跟随 `agent/created`/`agent/disposed`、`tools/change` 与面板保存后重新排入、同文本去重、待消费副本先移除、无 `agents` 服务/无 `inject` 时 fail-soft；`lib/index.js` 通道优先级改为 **message → context → section**（互斥，绝不重复注入）；`lib/service.js` 写入后 `refreshPrompt()`；`lib/client.js` 按通道给文案；新增 `test/prompt-message.test.mjs` 与真宿主消息通道用例 |
+| `36621d0` | **面板可写描述 + 主题化面板 + 常驻开关（0.11.x）**：面板样式走 `--dsw-*` token；逐服务器「常驻/收起」开关；`modelProfileEdits` 面板开关；修掉「每次保存都过不了网关 JSON 校验」 |
+| `<本次提交>` | **设置导航图标 + 改名发布（0.12.0）**：`lib/client.js` 新增 `installNavIcon`（`settings.section` 没有图标位 ⇒ 认领 `[role="dialog"] nav button` 里文本等于自己 label 的那一行，藏官方 svg、用 `mask-image: url(data:image/svg+xml,…)` + `background-color: currentColor` 画漏斗，跟随主题；`MutationObserver` + `queueMicrotask` 合并；空 label 不认领；随 `ctx.effect` 清理；零命中/无 DOM/无 observer 一律 fail-soft 退回齿轮），新增 `test/client-nav-icon.test.mjs`（5 条）；包名 `@yilinxiao/dsh-mcp-lazy` → **`@sutong12/dsh-mcp-lazy`**（含 `TYPERT.package`、bundle patch、README、断言），版本 0.12.0 并发布到 npm |
 
 ## 4. 本机环境事实
 
 | 项 | 值 |
 |---|---|
-| harness | `@deepseek-ai/dsh-desktop-runtime@0.2.0-rc.2`（全部 `@deepseek-ai/dsh-*` 都是 0.2.0-rc.2，`cordis 4.0.4`）；安装目录 `D:\work\tool\DSH` |
-| profile | `C:\Users\Tony\.dsh\profiles\desktop`（Electron 独占；`dsh --profile desktop` 会被拒绝） |
-| 插件安装方式 | profile `package.json` 里 `"@yilinxiao/dsh-mcp-lazy": "github:wishesl/dsh-mcp-lazy"` |
-| 已装版本 | 0.9.0 已装机；**0.10.0 需再次 `plugin_manager install_bundle` + 重启桌面版**（聊天消息流里出现标着 `mcp-lazy` 的注入条目即装机成功） |
-| MCP 服务器（全部常开、全部被接管） | `playwright` 25 工具、`chrome-devtools` 30、`tavily` 5、`context7` 2 |
-| 面板自定义描述的落盘位置 | `<profile>\.dsh-mcp-lazy\profiles.json`（本机即 `C:\Users\Tony\.dsh\profiles\desktop\.dsh-mcp-lazy\profiles.json`） |
-| 包名 | 仍是 `@yilinxiao/dsh-mcp-lazy`（**未**改成 `@wishesl/...`，见 §11 待决策） |
-| 重启语义 | 宿主插件与浏览器 bundle 变更后 `plugin_manager` 返回 `application: restart-required`，必须重启桌面版才生效；**但面板保存的自定义描述不需要重启**（下一轮装配即生效） |
+| harness | `@deepseek-ai/dsh-web@0.2.0-rc.2`（全部 `@deepseek-ai/dsh-*` 都是 0.2.0-rc.2，`cordis 4.0.4`）；安装目录 `E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.0-rc.2`（由 dsh-launcher 监督，网页在 http://127.0.0.1:3080） |
+| profile | 现在在用的是 **web** profile：`C:\Users\Tony\.dsh\profiles\web`（`DSH_PROFILE=web`）；桌面 desktop profile 另有安装，见 §4 旧记录 |
+| 插件安装方式 | web profile `package.json` 里 `"@sutong12/dsh-mcp-lazy": "link:E:/gopackage2/2026-8/woker1/dsh-mcp-lazy-fork"`（改一行代码、重启即生效；**必须**先跑 `node scripts/link-host-peers.mjs E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.0-rc.2`，`npm ci` 会清掉那些 junction） |
+| 已装版本 | 0.12.0（npm 首包 `@sutong12/dsh-mcp-lazy@0.12.0`；此前 0.5.1 是上游 `@yilinxiao` 的发布，不是本 fork） |
+| MCP 服务器（全部常开、全部被接管） | `playwright` 25 工具、`chrome-devtools` 30、`tavily` 5、`context7` 2、`magicui`、`pwsh-mcp` |
+| 面板自定义描述的落盘位置 | `<profile>\.dsh-mcp-lazy\profiles.json`（本机即 `C:\Users\Tony\.dsh\profiles\web\.dsh-mcp-lazy\profiles.json`） |
+| 包名 | `@sutong12/dsh-mcp-lazy`（0.12.0 起；旧名 `@yilinxiao/dsh-mcp-lazy` 只存在于上游发布与历史提交） |
+| 重启语义 | 宿主插件与浏览器 bundle 变更后必须重启 DSH 才生效（本会话可用 `dsh-restart` 工具，由 launcher 监督拉起）；**但面板保存的自定义描述不需要重启**（下一轮装配即生效） |
 
 常用命令：
 
 ```powershell
-# 更新到 fork 最新（改完代码、推送后）
-plugin_manager install_bundle target=github:wishesl/dsh-mcp-lazy   # 工具调用；之后重启桌面版
+# 改了 link: 装的本仓库代码之后：重启 DSH（本会话用 dsh-restart 工具，launcher 会监督拉起）
+# 忘了补宿主包 junction 时（npm ci 之后）：面板服务会静默缺席
+node scripts/link-host-peers.mjs E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.0-rc.2
 
-# 打开/关闭两个默认关闭过的大 MCP（现在应当保持常开，见 §11）
-plugin_manager set_plugin target=include:mcp-playwright enabled=true
-plugin_manager set_plugin target=include:mcp-chrome-devtools enabled=true
+# 从 npm 装（不用 link: 时）
+dsh plugin --profile web add @sutong12/dsh-mcp-lazy
 ```
 
 ## 5. 能力一：设置里的「MCP 管理」面板（读 + 写）
@@ -200,18 +202,19 @@ CI（`.github/workflows/test.yml`）：`test` 作业跑全量（Node 20/24）；
 **待办 backlog（按价值排序）**
 
 1. **回填补丁**：挂载时从 `ctx.agents` 枚举既有 agent 并接管，让"装上即对当前会话生效"（可选注入，老线自动跳过）。
-2. **包名/scope 决策**：是否把 `name` 改成 `@wishesl/dsh-mcp-lazy`（需同步 `cordis.patch.yml`、README、3 处断言）。
+2. **包名/scope**：0.12.0 起已定为 `@sutong12/dsh-mcp-lazy`（同步了 `cordis.patch.yml`、README、断言、`TYPERT.package`）；GitHub 仓库仍是 `wishesl/dsh-mcp-lazy`。
 3. 面板增强：按会话显示"已披露"状态、一键复制 `serverName`、覆盖的导入/导出（`profiles.json` 目前只能手改）、关键词编辑器做 tag 化。
-4. 发布 npm（当前只有 git 通道）。
+4. ~~发布 npm~~ 已完成：`@sutong12/dsh-mcp-lazy@0.12.0`（`npm publish --registry=https://registry.npmjs.org/`）。
 5. 上游回流：把 0.2 线兼容与这些功能作为 PR 提回 `leaforbook/dsh-mcp-lazy`。
 6. 可选：把面板编辑的字段也写进 `cordis.patch.yml` 的 `serverProfiles`（现在是本插件自己的状态文件，好处是不改用户的 YAML，代价是用户的配置体系里看不到这些覆盖）。
+7. 可选：给 CI 加一条 tag → npm 发布的工作流（现在是本地手发）。
 
 ## 12. 本地开发注意
 
 - **免构建**：`lib/` 是提交产物，安装端不跑构建（pnpm 不装 git 依赖的 devDeps）。浏览器半是手写 bundle，改完直接提交。
 - **Windows 换行**：仓库有 `.gitattributes`（`eol=lf`）；测试读文件时统一 `\r\n → \n`。提交用 `git -c core.autocrlf=false`。
 - **清点验证工具**：`E:\gopackage2\2026-8\woker1\_contract\host` 是沙盒（装了真实 typert-loader / typert-protocol 等），`probe-manifest.mjs`、`probe-installed.mjs` 可直接用真实 loader 校验清单；改 `TYPERT` 或增删调用前后都跑一次（`cd _contract\host; node probe-manifest.mjs`）。
-- **装机时宿主在跑 → `install_bundle` 可能报 `application: failed` + `ambiguous-install`**：pnpm 其实成功（exitCode 0），profile 里 `node_modules\@yilinxiao\dsh-mcp-lazy` 也已换成新版本（读 `package.json` 版本号 + 比对 `lib\*.js` 哈希即可确认；注意本地工作区可能是 CRLF、git 检出是 LF），只是运行中的进程还持有旧模块，管理器无法声称一次干净的激活。**以磁盘文件为准，然后重启桌面版**，不要为此反复重装。
+- **装机时宿主在跑 → `install_bundle` 可能报 `application: failed` + `ambiguous-install`**：pnpm 其实成功（exitCode 0），profile 里 `node_modules\@sutong12\dsh-mcp-lazy` 也已换成新版本（读 `package.json` 版本号 + 比对 `lib\*.js` 哈希即可确认；注意本地工作区可能是 CRLF、git 检出是 LF），只是运行中的进程还持有旧模块，管理器无法声称一次干净的激活。**以磁盘文件为准，然后重启 DSH**，不要为此反复重装。
 - **`npm install --no-save` 会互相剪包**：它把上一次未写进 package.json 的包当 extraneous 删掉，所以 compat 的多个包必须**一条命令**装；跑完基线 lane 前记得 `npm ci` 还原，否则 `test/host-runtime-compat.test.mjs`（"profile 不得 shadow 宿主 runtime 包"）会失败——这是**环境问题，不是代码缺陷**，CI 里两个 job 天然分开所以不会遇到。
 - **面板写入的状态文件**：`<profile>\.dsh-mcp-lazy\profiles.json`。手工改它也能生效（下一轮装配读）；字段与 `serverProfiles` 同形，超长/多行会被归一化（描述折成一行、关键词去重截断）。
 - **不要做的事**：
@@ -236,15 +239,15 @@ CI（`.github/workflows/test.yml`）：`test` 作业跑全量（Node 20/24）；
 ## 14. 回滚与停用
 
 ```yaml
-# C:\Users\Tony\.dsh\profiles\desktop\cordis.patch.yml（末尾追加覆盖行）
+# C:\Users\Tony\.dsh\profiles\web\cordis.patch.yml（末尾追加覆盖行）
 - id: mcp-lazy-manager
   disabled: true       # 停用接管：工具恢复常驻可见，插件仍安装
 ```
 
 ```powershell
-# 完全卸载
-plugin_manager set_plugin target=@yilinxiao/dsh-mcp-lazy enabled=false
-# 或从 profile 依赖里移除 github:wishesl/dsh-mcp-lazy 后重启
+# 完全卸载（web profile）
+dsh plugin --profile web remove @sutong12/dsh-mcp-lazy
+# 或手工把 profile package.json 里的依赖键与 dsh.profile.bundles 项一起删掉，再 pnpm install + 重启
 ```
 
 停用接管后，若同时把 playwright / chrome-devtools 保持常开，每个会话会多出 55 个工具 schema —— 这也是本次新增索引面板想避免的情况。
@@ -254,15 +257,18 @@ plugin_manager set_plugin target=@yilinxiao/dsh-mcp-lazy enabled=false
 ### 附：一页速查
 
 ```
-仓库        https://github.com/wishesl/dsh-mcp-lazy          HEAD <见 §3 最新一行> / 0.9.0
+仓库        https://github.com/wishesl/dsh-mcp-lazy          HEAD <见 §3 最新一行> / 0.12.0
+npm         @sutong12/dsh-mcp-lazy@0.12.0                   （首包，发布用 --registry=https://registry.npmjs.org/）
 本地克隆    E:\gopackage2\2026-8\woker1\dsh-mcp-lazy-fork
 沙盒        E:\gopackage2\2026-8\woker1\_contract\host      （真实 typert-loader 校验：node probe-manifest.mjs）
-profile     C:\Users\Tony\.dsh\profiles\desktop              （Electron 独占，改插件后需重启）
+profile     C:\Users\Tony\.dsh\profiles\web                  （link: 本仓库；改插件后需重启 DSH）
+宿主包      node scripts/link-host-peers.mjs E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.0-rc.2   （npm ci 后必跑）
 网关工具    mcp__router__search_and_activate(query, serverName?)
 面板        settings.section id=mcp-lazy / remote 命名空间 mcpLazy
             snapshot() / saveProfile({serverName,description?,keywords?}) / resetProfile({serverName})
+导航图标    认领 [role="dialog"] nav button 里文本=自己 label 的那一行（官方无图标位），mask 剪影跟随主题
 面板状态    <profile>\.dsh-mcp-lazy\profiles.json            （面板自定义描述/关键词，原子写）
 注入条目    一条 user 消息：source `{ kind: 'mcp-lazy', form: 'catalog' }`（聊天里单独成条）；降级：运行时上下文 `mcp-lazy:index` @ order 130 → 提示词段 @ order 3150
-测试        npm test → 154 项（150 通过 / 4 skipped）；真宿主 DSH_COMPAT_VERSION=0.2.0-rc.2 → 4/4
+测试        npm test → 184 项（179 通过 / 4 skipped 左右）；真宿主 DSH_COMPAT_VERSION=0.2.0-rc.2 → 4/4
 真宿主      DSH_COMPAT_VERSION=0.2.0-rc.2 node --test test/dsh-version-compat.test.mjs   （3/3）
 ```

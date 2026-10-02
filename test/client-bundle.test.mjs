@@ -38,7 +38,7 @@ async function loadBundle() {
   globalThis.window = { __ModuleLoader__: { load: (value) => { definition = value } } }
   await import(BUNDLE_URL)
   assert.ok(definition, 'the bundle must register one __ModuleLoader__ definition')
-  assert.equal(definition.id, '@yilinxiao/dsh-mcp-lazy')
+  assert.equal(definition.id, '@sutong12/dsh-mcp-lazy')
   const react = fakeReact()
   cachedBundle = {
     plugin: definition.factory((specifier) => {
@@ -208,7 +208,7 @@ test('the browser bundle registers one settings.section entry and mounts every d
   // Typert faces would drift and the Remote call would 404. `package` must be
   // the real npm name: the host loader rejects any other owner.
   assert.equal(record.mounted.package, MCP_LAZY_PACKAGE)
-  assert.equal(record.mounted.package, '@yilinxiao/dsh-mcp-lazy')
+  assert.equal(record.mounted.package, '@sutong12/dsh-mcp-lazy')
   assert.equal(record.mounted.descriptors.length, MCP_LAZY_INVOCATIONS.length)
   for (const [index, descriptor] of record.mounted.descriptors.entries()) {
     assert.deepEqual(project(descriptor), project(MCP_LAZY_INVOCATIONS[index]))

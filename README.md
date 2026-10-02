@@ -1,10 +1,10 @@
-# DSH MCP Lazy（@yilinxiao/dsh-mcp-lazy）
+# DSH MCP Lazy（@sutong12/dsh-mcp-lazy）
 
 这是一个给 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 使用的插件。
 
 一句话说明它的用途：**MCP 装得越多，模型每轮都要读取的工具说明就越多；这个插件会先把暂时用不到的工具说明藏起来，需要时再加载，从而减少 Token 消耗。**
 
-当前版本：`0.11.1`
+当前版本：`0.12.0`
 
 ## 它解决了什么问题
 
@@ -24,12 +24,12 @@
 ## 安装
 
 ```sh
-dsh plugin --profile web add @yilinxiao/dsh-mcp-lazy
+dsh plugin --profile web add @sutong12/dsh-mcp-lazy
 ```
 
 安装后重启 DSH 即可。插件会自动发现已经安装的兼容 MCP，不需要逐个填写 MCP 地址、请求头或密钥。
 
-源码和版本记录在 [GitHub](https://github.com/leaforbook/dsh-mcp-lazy)。
+源码和版本记录在 [GitHub](https://github.com/wishesl/dsh-mcp-lazy)（fork 自 [leaforbook/dsh-mcp-lazy](https://github.com/leaforbook/dsh-mcp-lazy)）。
 
 ## 装完以后怎么用
 
@@ -46,7 +46,7 @@ dsh plugin --profile web add @yilinxiao/dsh-mcp-lazy
 ```yaml
 - insert:
     - id: mcp-lazy-manager
-      name: '@yilinxiao/dsh-mcp-lazy'
+      name: '@sutong12/dsh-mcp-lazy'
       config:
         mode: manager
 ```
@@ -127,7 +127,7 @@ dsh plugin --profile web add @yilinxiao/dsh-mcp-lazy
 ```yaml
 - insert:
     - id: mcp-lazy
-      name: '@yilinxiao/dsh-mcp-lazy'
+      name: '@sutong12/dsh-mcp-lazy'
       config:
         transport: stdio
         serverName: filesystem
@@ -143,7 +143,7 @@ dsh plugin --profile web add @yilinxiao/dsh-mcp-lazy
         routingHints: [文件, 目录]
 
     - id: mcp-lazy
-      name: '@yilinxiao/dsh-mcp-lazy'
+      name: '@sutong12/dsh-mcp-lazy'
       config:
         transport: streamable-http
         serverName: remote-api
@@ -209,6 +209,8 @@ DSH 升级大版本后，建议先运行本仓库的兼容测试，再用于重�
 ## 设置面板：「MCP 管理」——看得到注入，也能自定义
 
 装的 MCP 越多，越难记住到底有哪些服务器、各自提供什么。插件在**设置**里注册了一个独立菜单（槽位 `settings.section`，条目 id `mcp-lazy`）；聊天里则直接能看到注入条目（见下一节）。
+
+左侧菜单那一行的图标是插件**自己认领**来的：`settings.section` 只投影 `id` / `order` / `label`，导航图标按 section id 硬编码、未知 id 一律兜底通用齿轮。所以浏览器半挑出「行文本等于自己 label」的那一行，藏掉官方 svg，用 `mask-image` 画一个跟随主题色的漏斗（做法与 dshmarket 的 `settings-nav-icon.ts` 一致）。官方改了设置面板结构时认领会零命中并**优雅退回齿轮**，不影响插件其余功能；官方哪天给 `settings.section` 长出 `icon` 字段，这段整块删掉。
 
 - **注入的提示词（默认展开）**：真正注入的那段**原文**（与聊天里那条独立注入记录逐字相同），可一键复制，并标注通道（会话消息 / 运行时上下文 / 提示词段）与「何时未注入」（`promptIndex: false` / 宿主缺通道 / 当前无受管服务器）。
 - **自定义描述与关键词**：每张服务器卡片上有「自定义描述」，编辑后**保存**即写入 profile，下一轮装配生效；「恢复默认」删除覆盖，回到从 MCP 定义派生的结果。字段来源会标成「面板自定义 / 配置文件固定 / 自动派生」。
@@ -282,7 +284,7 @@ DSH 升级大版本后，建议先运行本仓库的兼容测试，再用于重�
 ```yaml
 - insert:
     - id: mcp-lazy
-      name: '@yilinxiao/dsh-mcp-lazy'
+      name: '@sutong12/dsh-mcp-lazy'
       config:
         transport: stdio
         serverName: filesystem

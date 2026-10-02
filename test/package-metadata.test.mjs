@@ -14,10 +14,10 @@ const lock = JSON.parse(await read('../package-lock.json'))
 const bundlePatch = await read('../cordis.patch.yml')
 
 test('package metadata publishes the installable bundle from the npm owner scope', () => {
-  assert.equal(pkg.name, '@yilinxiao/dsh-mcp-lazy')
-  assert.equal(pkg.version, '0.11.1')
-  assert.equal(lock.version, '0.11.1')
-  assert.equal(lock.packages[''].version, '0.11.1')
+  assert.equal(pkg.name, '@sutong12/dsh-mcp-lazy')
+  assert.equal(pkg.version, '0.12.0')
+  assert.equal(lock.version, '0.12.0')
+  assert.equal(lock.packages[''].version, '0.12.0')
   assert.equal(pkg.repository.url, 'git+https://github.com/wishesl/dsh-mcp-lazy.git')
   assert.equal(pkg.homepage, 'https://github.com/wishesl/dsh-mcp-lazy#readme')
   assert.equal(pkg.bugs.url, 'https://github.com/wishesl/dsh-mcp-lazy/issues')
@@ -33,7 +33,7 @@ test('package metadata publishes the installable bundle from the npm owner scope
   assert.equal(pkg.exports['./typert'], './lib/typert.host.js')
   assert.equal(pkg.exports['./client'], './lib/client.js')
   assert.ok(pkg.files.includes('cordis.patch.yml'))
-  assert.match(bundlePatch, /name: '@yilinxiao\/dsh-mcp-lazy'/)
+  assert.match(bundlePatch, /name: '@sutong12\/dsh-mcp-lazy'/)
 })
 
 test('package metadata declares the whole supported DSH release corridor', () => {
