@@ -321,19 +321,24 @@ async function universalManagerLifecycle() {
     'managed-host-ok'
   )
 
+  // Disclosure accumulates inside one session: this agent now keeps both.
+  const managedFixtureTools = context.visibleNames(first)
+    .filter((name) => name.startsWith('mcp__managed-fixture__'))
+  const firstDisclosed = () => [
+    ...managedFixtureTools,
+    'mcp__passive-alpha__counter',
+    'mcp__passive-alpha__echo',
+    describeToolName,
+    routerToolName
+  ].sort()
+
   const routed = await call(context, routerToolName, {
     query: 'passive alpha echo',
     serverName: 'passive-alpha'
   }, first)
   assert.match(routed.content[0].text, /passive-alpha/)
-  assert.deepEqual(context.visibleNames(first), [
-    'mcp__passive-alpha__counter',
-    'mcp__passive-alpha__echo',
-    describeToolName,
-    routerToolName
-  ])
+  assert.deepEqual(context.visibleNames(first), firstDisclosed(), 'a second disclosure accumulates')
   assert.deepEqual(context.visibleNames(second), [describeToolName, routerToolName])
-  assert.ok(!context.visibleNames(first).includes('mcp__managed-fixture__echo'))
 
   const echo = await call(context, 'mcp__passive-alpha__echo', { text: 'passive-host-ok' }, first)
   assert.deepEqual(echo, {
@@ -342,7 +347,7 @@ async function universalManagerLifecycle() {
   })
 
   context.emit('agent/turn-stopping', { agent: first })
-  assert.deepEqual(context.visibleNames(first), [describeToolName, routerToolName])
+  assert.deepEqual(context.visibleNames(first), firstDisclosed(), 'a turn boundary must not retract a session disclosure')
 
   // The model-facing write channel. A manager-owned server (registered without
   // an explicit lazy instance) turns the new description into a routing hint.
@@ -356,7 +361,7 @@ async function universalManagerLifecycle() {
 
   const routedByDescription = await call(context, routerToolName, { query: '静默回声夹具' }, second)
   assert.match(routedByDescription.content[0].text, /passive-beta/)
-  assert.deepEqual(context.visibleNames(first), [describeToolName, routerToolName], 'describing a server must not reveal it')
+  assert.deepEqual(context.visibleNames(first), firstDisclosed(), 'describing one server must not disclose another')
 
   // A server that also owns an explicit lazy instance keeps its text in the
   // index, but its routing entry is the explicit one; the write must still land

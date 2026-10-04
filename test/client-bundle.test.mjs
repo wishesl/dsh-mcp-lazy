@@ -114,7 +114,7 @@ function clientContext({ snapshotResult, saveResult, resetResult, saveSettingsRe
 const PROMPT_TEXT = [
   '## MCP 服务器（按需加载）',
   '',
-  '以下 MCP 服务器的工具默认不在工具表里。需要时调用 `mcp__router__search_and_activate`：带 `query`（能力关键词）或 `serverName`（精确指定服务器名）；披露后当轮即可直接调用。',
+  '以下 MCP 服务器的工具默认不在工具表里。需要时调用 `mcp__router__search_and_activate`：带 `query`（能力关键词）或 `serverName`（精确指定服务器名）；披露后本次会话内一直可直接调用。',
   '',
   '- playwright（2 个工具）: browser, navigate'
 ].join('\n')

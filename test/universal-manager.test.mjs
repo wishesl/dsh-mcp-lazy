@@ -294,7 +294,7 @@ test('cold agents see only the router and disclosure is isolated to one agent', 
   disposeManager()
 })
 
-test('a second route replaces the selected server and turn stopping hides both again', async () => {
+test('a second route accumulates and a turn boundary keeps the session disclosure', async () => {
   const { host, disposeManager } = createTwoServerHost()
   const agent = host.createAgent('agent')
   host.emit('agent/created', { agent })
@@ -302,9 +302,91 @@ test('a second route replaces the selected server and turn stopping hides both a
   await host.call(agent, ROUTER_TOOL_NAME, { query: 'alpha', serverName: 'alpha' })
   assert.deepEqual(host.visibleNames(agent), [ROUTER_TOOL_NAME, 'mcp__alpha__echo'].sort())
   await host.call(agent, ROUTER_TOOL_NAME, { query: 'beta', serverName: 'beta' })
-  assert.deepEqual(host.visibleNames(agent), [ROUTER_TOOL_NAME, 'mcp__beta__search'].sort())
+  assert.deepEqual(
+    host.visibleNames(agent),
+    [ROUTER_TOOL_NAME, 'mcp__alpha__echo', 'mcp__beta__search'].sort(),
+    'disclosing a second server must not retract the first'
+  )
   host.emit('agent/turn-stopping', { agent })
-  assert.deepEqual(host.visibleNames(agent), [ROUTER_TOOL_NAME])
+  assert.deepEqual(
+    host.visibleNames(agent),
+    [ROUTER_TOOL_NAME, 'mcp__alpha__echo', 'mcp__beta__search'].sort(),
+    'a turn boundary must not retract a session disclosure'
+  )
+  host.emit('agent/disposed', { agent })
+  assert.deepEqual(
+    host.visibleNames(agent),
+    [ROUTER_TOOL_NAME, 'mcp__alpha__echo', 'mcp__beta__search'].sort(),
+    'session disposal lifts the mask, it never hides tools'
+  )
+  disposeManager()
+})
+
+test('a quiet turn boundary does not replace the installed mask', async () => {
+  const { host, disposeManager } = createTwoServerHost()
+  const agent = host.createAgent('agent')
+  host.emit('agent/created', { agent })
+  const afterCreate = host.counters.restrictionAttempts
+  await host.call(agent, ROUTER_TOOL_NAME, { query: 'alpha', serverName: 'alpha' })
+  const afterReveal = host.counters.restrictionAttempts
+  assert.ok(afterReveal > afterCreate, 'the disclosure narrowed the mask')
+
+  // The whole point: a turn that disclosed nothing must not touch the tool table.
+  host.emit('agent/turn-stopping', { agent })
+  host.emit('agent/turn-stopping', { agent })
+  host.emit('tools/change')
+  assert.equal(host.counters.restrictionAttempts, afterReveal, 'no gratuitous mask replacement')
+  assert.deepEqual(host.visibleNames(agent), [ROUTER_TOOL_NAME, 'mcp__alpha__echo'].sort())
+  disposeManager()
+})
+
+test('re-revealing the same server is a no-op for the tool table', async () => {
+  const { host, disposeManager } = createTwoServerHost()
+  const agent = host.createAgent('agent')
+  host.emit('agent/created', { agent })
+  await host.call(agent, ROUTER_TOOL_NAME, { query: 'alpha', serverName: 'alpha' })
+  const installed = host.counters.restrictionAttempts
+
+  const again = await host.call(agent, ROUTER_TOOL_NAME, { query: 'alpha', serverName: 'alpha' })
+  assert.match(again.content[0].text, /已披露/)
+  assert.equal(host.counters.restrictionAttempts, installed, 'an identical mask stays in place')
+  assert.deepEqual(host.visibleNames(agent), [ROUTER_TOOL_NAME, 'mcp__alpha__echo'].sort())
+  disposeManager()
+})
+
+test('a disclosed server that leaves the catalog is pruned without revealing the rest', async () => {
+  const host = createHost()
+  const disposeManager = install(host)
+  const disposeAlpha = host.register(eagerTool('mcp__alpha__echo', 'echo alpha'))
+  host.register(eagerTool('mcp__beta__search', 'search beta'))
+  const agent = host.createAgent('agent')
+  host.emit('agent/created', { agent })
+  await host.call(agent, ROUTER_TOOL_NAME, { query: 'alpha', serverName: 'alpha' })
+  assert.deepEqual(host.visibleNames(agent), [ROUTER_TOOL_NAME, 'mcp__alpha__echo'].sort())
+
+  disposeAlpha()
+  assert.deepEqual(host.visibleNames(agent), [ROUTER_TOOL_NAME], 'beta stays collapsed')
+  disposeManager()
+})
+
+test('a fail-open window does not forget what the session disclosed', async () => {
+  const host = createHost()
+  const disposeManager = install(host)
+  host.register(eagerTool('mcp__alpha__echo', 'echo alpha'))
+  host.register(eagerTool('mcp__beta__search', 'search beta'))
+  const agent = host.createAgent('agent')
+  host.emit('agent/created', { agent })
+  await host.call(agent, ROUTER_TOOL_NAME, { query: 'alpha', serverName: 'alpha' })
+
+  host.setSchemasError(new Error('catalog failed'))
+  assert.ok(host.visibleNames(agent).includes('mcp__alpha__echo'), 'fail-open leaves everything visible')
+  host.setSchemasError(undefined)
+  host.emit('agent/turn-stopping', { agent })
+  assert.deepEqual(
+    host.visibleNames(agent),
+    [ROUTER_TOOL_NAME, 'mcp__alpha__echo'].sort(),
+    'recovery rebuilds the mask around the retained disclosure'
+  )
   disposeManager()
 })
 
@@ -462,7 +544,7 @@ test('a thrown restriction replacement lifts the previous restriction and fails 
   disposeManager()
 })
 
-test('passive disclosure failure stays unrestricted for the turn and retries at the next boundary', async () => {
+test('passive disclosure failure stays unrestricted for the turn and recovers the disclosure at the next boundary', async () => {
   let rejectDisclosure = false
   const host = createHost({
     restrictionFactory({ deny }) {
@@ -488,9 +570,13 @@ test('passive disclosure failure stays unrestricted for the turn and retries at 
   assert.ok(host.visibleNames(agent).includes('mcp__alpha__echo'))
 
   host.emit('agent/turn-stopping', { agent })
-  assert.deepEqual(host.visibleNames(agent), [ROUTER_TOOL_NAME])
+  assert.deepEqual(
+    host.visibleNames(agent),
+    [ROUTER_TOOL_NAME, 'mcp__alpha__echo'].sort(),
+    'the failed disclosure is recovered at the boundary, not retracted'
+  )
   await host.call(agent, ROUTER_TOOL_NAME, { query: 'alpha', serverName: 'alpha' })
-  assert.ok(host.visibleNames(agent).includes('mcp__alpha__echo'))
+  assert.deepEqual(host.visibleNames(agent), [ROUTER_TOOL_NAME, 'mcp__alpha__echo'].sort())
   disposeManager()
 })
 

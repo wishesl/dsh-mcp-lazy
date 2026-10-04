@@ -3,13 +3,13 @@
 > 面向下一个接手的人（或下一个会话）。目标：不用重新推导，就能继续开发、验证、排障、回滚。
 > 仓库：`https://github.com/wishesl/dsh-mcp-lazy`（fork 自 `leaforbook/dsh-mcp-lazy`）
 > 本地克隆：`E:\gopackage2\2026-8\woker1\dsh-mcp-lazy-fork`
-> 当前版本：`0.12.0`（已发布 npm：`@sutong12/dsh-mcp-lazy`）
+> 当前版本：`0.13.0`（npm 上最新发布仍是 `0.12.0`：`@sutong12/dsh-mcp-lazy`）
 
 ---
 
 ## 1. 这个插件是干什么的
 
-DSH 的 MCP 懒加载桥：把已连接的 MCP 工具**按会话隐藏**，只暴露一个网关工具，模型需要时再披露该服务器的工具。
+DSH 的 MCP 懒加载桥：把已连接的 MCP 工具**按会话隐藏**，只暴露一个网关工具，模型需要时再披露该服务器的工具。披露**在会话内累计保留**（轮次边界不收回，换取工具表稳定与 prompt cache 命中），会话结束才释放。
 
 - 网关工具：`mcp__router__search_and_activate(query, serverName?)`
 - 两种模式：
@@ -33,15 +33,16 @@ DSH 的 MCP 懒加载桥：把已连接的 MCP 工具**按会话隐藏**，只�
 | `<0.10.0>` | **索引改为独立会话消息**：新增 `lib/prompt-message.js` —— `agent.inject(createUserMessage({ content, source: { kind: 'mcp-lazy', form: 'catalog' } }))`，与根目录 AGENTS.md 同一机制，因而在聊天里**单独成条**；含挂载回填老会话、跟随 `agent/created`/`agent/disposed`、`tools/change` 与面板保存后重新排入、同文本去重、待消费副本先移除、无 `agents` 服务/无 `inject` 时 fail-soft；`lib/index.js` 通道优先级改为 **message → context → section**（互斥，绝不重复注入）；`lib/service.js` 写入后 `refreshPrompt()`；`lib/client.js` 按通道给文案；新增 `test/prompt-message.test.mjs` 与真宿主消息通道用例 |
 | `36621d0` | **面板可写描述 + 主题化面板 + 常驻开关（0.11.x）**：面板样式走 `--dsw-*` token；逐服务器「常驻/收起」开关；`modelProfileEdits` 面板开关；修掉「每次保存都过不了网关 JSON 校验」 |
 | `c75497b` | **设置导航图标 + 改名发布（0.12.0）**：`lib/client.js` 新增 `installNavIcon`（`settings.section` 没有图标位 ⇒ 认领 `[role="dialog"] nav button` 里文本等于自己 label 的那一行，藏官方 svg、用 `mask-image: url(data:image/svg+xml,…)` + `background-color: currentColor` 画漏斗，跟随主题；`MutationObserver` + `queueMicrotask` 合并；空 label 不认领；随 `ctx.effect` 清理；零命中/无 DOM/无 observer 一律 fail-soft 退回齿轮），新增 `test/client-nav-icon.test.mjs`（5 条）；包名 `@yilinxiao/dsh-mcp-lazy` → **`@sutong12/dsh-mcp-lazy`**（含 `TYPERT.package`、bundle patch、README、断言），版本 0.12.0 并发布到 npm |
+| `<0.13.0>` | **会话内持久披露（0.13.0）**：`lib/universal-manager.js` 把 per-agent 的 `selectedServer` 换成 `revealedServers` 集合（披露只增不减）；`onTurnStopping` 只在「fail-open 当轮放行」或「当前没有任何掩码」时重装，**已装掩码一律不动**（`appliedDeny` 相同则短路）；`failOpen` 不再清披露集合、只清当轮放行；离开目录/转常驻的服务器在 reconcile 时剪枝；`lib/mcp-view.js` 的注入索引文案改为「披露后本次会话内一直可直接调用」。动机是每轮收回会让工具表抖动、打掉 prompt cache |
 
 ## 4. 本机环境事实
 
 | 项 | 值 |
 |---|---|
-| harness | `@deepseek-ai/dsh-web@0.2.0-rc.2`（全部 `@deepseek-ai/dsh-*` 都是 0.2.0-rc.2，`cordis 4.0.4`）；安装目录 `E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.0-rc.2`（由 dsh-launcher 监督，网页在 http://127.0.0.1:3080） |
+| harness | 运行中的宿主安装目录是 `E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.1-alpha.1`（由 dsh-launcher 监督，网页在 http://127.0.0.1:3080）。`0.2.0-rc.2` 是旧目录：仓库 `node_modules\@deepseek-ai\*` 里的 junction 曾指向它，会让 `test/host-runtime-compat.test.mjs` 失败 → `npm ci` 清掉后，用**当前**安装目录重跑边车脚本 |
 | profile | 现在在用的是 **web** profile：`C:\Users\Tony\.dsh\profiles\web`（`DSH_PROFILE=web`）；桌面 desktop profile 另有安装，见 §4 旧记录 |
-| 插件安装方式 | web profile `package.json` 里 `"@sutong12/dsh-mcp-lazy": "link:E:/gopackage2/2026-8/woker1/dsh-mcp-lazy-fork"`（改一行代码、重启即生效；**必须**先跑 `node scripts/link-host-peers.mjs E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.0-rc.2`，`npm ci` 会清掉那些 junction） |
-| 已装版本 | 0.12.0（npm 首包 `@sutong12/dsh-mcp-lazy@0.12.0`；此前 0.5.1 是上游 `@yilinxiao` 的发布，不是本 fork） |
+| 插件安装方式 | web profile `package.json` 里 `"@sutong12/dsh-mcp-lazy": "link:E:/gopackage2/2026-8/woker1/dsh-mcp-lazy-fork"`（改一行代码、重启即生效；**必须**先跑 `node scripts/link-host-peers.mjs E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.1-alpha.1`，`npm ci` 会清掉那些 junction） |
+| 已装版本 | 仓库 0.13.0（profile 用 `link:` 指本仓库，重启即生效）；npm 上最新发布仍是 0.12.0（首包；0.5.1 是上游 `@yilinxiao` 的发布，不是本 fork） |
 | MCP 服务器（全部常开、全部被接管） | `playwright` 25 工具、`chrome-devtools` 30、`tavily` 5、`context7` 2、`magicui`、`pwsh-mcp` |
 | 面板自定义描述的落盘位置 | `<profile>\.dsh-mcp-lazy\profiles.json`（本机即 `C:\Users\Tony\.dsh\profiles\web\.dsh-mcp-lazy\profiles.json`） |
 | 包名 | `@sutong12/dsh-mcp-lazy`（0.12.0 起；旧名 `@yilinxiao/dsh-mcp-lazy` 只存在于上游发布与历史提交） |
@@ -147,7 +148,7 @@ lib/service.js  McpLazyService extends TypertRemoteService
 ```powershell
 cd E:\gopackage2\2026-8\woker1\dsh-mcp-lazy-fork
 npm ci --legacy-peer-deps --ignore-scripts
-npm test                      # 154 项：150 通过 / 0 失败 / 4 skipped（compat 门控）
+npm test                      # 183 项：179 通过 / 0 失败 / 4 skipped（compat 门控；junction 残留会让 host-runtime-compat 失败，属环境问题）
 ```
 
 | 测试文件 | 覆盖 |
@@ -157,7 +158,7 @@ npm test                      # 154 项：150 通过 / 0 失败 / 4 skipped（co
 | `test/client-bundle.test.mjs` | 浏览器 bundle：`__ModuleLoader__` 注册、`settings.section` 参数、**两面 3 个描述符逐字段一致**（含参数 codec）、快照/参数 codec 行为、面板渲染（含**注入提示词区块**与编辑器）、空态/不可用/错误态、保存/重置/失败保留草稿/内存态提示 |
 | `test/dsh-version-compat.test.mjs` | stub-host（无 `context()`）：回退 section 的段名/order 3150/文本/稳定；real-host ① 另加：**注册为运行时上下文**（order 130）、`assemble().contexts` 与 `renderContextSnapshot()` 逐字含索引、**用 context 时 section 数为 0**；real-host ①：真 cordis + 真 ToolService + 真 scope `restrict` + 真 system-prompt 段位 + **真实 `validateTypertManifest`**；real-host ②（0.8.0 新增）：**真 TypertRemoteService** 挂载面板服务，`snapshot` 文本 == 上下文文本、`saveProfile` 落盘、中文别名经真实注册表**路由并披露**、`resetProfile` 还原、空 serverName 报错 |
 | `test/package-metadata.test.mjs` | 版本/仓库/exports/`dsh.client`/peer 走廊/**`TYPERT.package === pkg.name`** + 清单形状 + 3 个调用与参数 codec 行为 |
-| `test/universal-manager.test.mjs` | 现有覆盖 + **`hintsOf` 函数源即时生效**（保存后同一对象下一次查询即命中，并经路由工具披露）、抛错的 hints 源降级 |
+| `test/universal-manager.test.mjs` | 现有覆盖 + **`hintsOf` 函数源即时生效**（保存后同一对象下一次查询即命中，并经路由工具披露）、抛错的 hints 源降级、**会话内持久披露**（第二台累加不替换、轮次边界不收回、静默轮次不重装掩码、重复披露幂等、离开目录剪枝、fail-open 不丢披露） |
 | `test/fixtures/plugin-host-harness.mjs` | 真 stdio MCP 夹具的完整生命周期（含配置默认值断言） |
 
 真宿主 / CI 等价流程（**7 个包必须一条命令装**：`--no-save` 的第二次安装会把上一次未写进 package.json 的包当 extraneous 剪掉）：
@@ -192,6 +193,7 @@ CI（`.github/workflows/test.yml`）：`test` 作业跑全量（Node 20/24）；
 **限制（当前设计如此）**
 
 - 插件**挂载前就存在的会话不会被接管**：管理器只从 `agent/created` 认识 agent，老会话保持满量工具（fail-open）。→ 新会话才享受懒加载。
+- 披露在**会话内累计保留**（0.13.0 起）：轮次边界不收回任何已披露的工具，只做 fail-open 恢复与「当前无掩码」时的重试；代价是长会话里可见工具只增不减，新会话才回到冷态。这是为 prompt cache 命中做的取舍。
 - 某个 MCP 若在某会话的工具掩码算完之后才连上，它对该会话保持可见，直到下一轮 reconcile。
 - 面板是**全局视图**，不含 per-session 披露状态（避免再开一条会话态通道）。
 - `0.1.x` 矩阵行会跳过面板相关断言（该线没有 typert）；插件本体仍可用。
@@ -257,18 +259,18 @@ dsh plugin --profile web remove @sutong12/dsh-mcp-lazy
 ### 附：一页速查
 
 ```
-仓库        https://github.com/wishesl/dsh-mcp-lazy          HEAD <见 §3 最新一行> / 0.12.0
-npm         @sutong12/dsh-mcp-lazy@0.12.0                   （首包，发布用 --registry=https://registry.npmjs.org/）
+仓库        https://github.com/wishesl/dsh-mcp-lazy          HEAD <见 §3 最新一行> / 0.13.0
+npm         @sutong12/dsh-mcp-lazy@0.12.0                   （最新发布；发布用 --registry=https://registry.npmjs.org/）
 本地克隆    E:\gopackage2\2026-8\woker1\dsh-mcp-lazy-fork
 沙盒        E:\gopackage2\2026-8\woker1\_contract\host      （真实 typert-loader 校验：node probe-manifest.mjs）
 profile     C:\Users\Tony\.dsh\profiles\web                  （link: 本仓库；改插件后需重启 DSH）
-宿主包      node scripts/link-host-peers.mjs E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.0-rc.2   （npm ci 后必跑）
+宿主包      node scripts/link-host-peers.mjs E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.1-alpha.1   （npm ci 后必跑，用当前宿主目录）
 网关工具    mcp__router__search_and_activate(query, serverName?)
 面板        settings.section id=mcp-lazy / remote 命名空间 mcpLazy
             snapshot() / saveProfile({serverName,description?,keywords?}) / resetProfile({serverName})
 导航图标    认领 [role="dialog"] nav button 里文本=自己 label 的那一行（官方无图标位），mask 剪影跟随主题
 面板状态    <profile>\.dsh-mcp-lazy\profiles.json            （面板自定义描述/关键词，原子写）
 注入条目    一条 user 消息：source `{ kind: 'mcp-lazy', form: 'catalog' }`（聊天里单独成条）；降级：运行时上下文 `mcp-lazy:index` @ order 130 → 提示词段 @ order 3150
-测试        npm test → 184 项（179 通过 / 4 skipped 左右）；真宿主 DSH_COMPAT_VERSION=0.2.0-rc.2 → 4/4
+测试        npm test → 183 项（179 通过 / 4 skipped 左右）；真宿主 DSH_COMPAT_VERSION=0.2.0-rc.2 → 4/4
 真宿主      DSH_COMPAT_VERSION=0.2.0-rc.2 node --test test/dsh-version-compat.test.mjs   （3/3）
 ```

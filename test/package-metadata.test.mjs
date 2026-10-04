@@ -15,9 +15,9 @@ const bundlePatch = await read('../cordis.patch.yml')
 
 test('package metadata publishes the installable bundle from the npm owner scope', () => {
   assert.equal(pkg.name, '@sutong12/dsh-mcp-lazy')
-  assert.equal(pkg.version, '0.12.0')
-  assert.equal(lock.version, '0.12.0')
-  assert.equal(lock.packages[''].version, '0.12.0')
+  assert.equal(pkg.version, '0.13.0')
+  assert.equal(lock.version, '0.13.0')
+  assert.equal(lock.packages[''].version, '0.13.0')
   assert.equal(pkg.repository.url, 'git+https://github.com/wishesl/dsh-mcp-lazy.git')
   assert.equal(pkg.homepage, 'https://github.com/wishesl/dsh-mcp-lazy#readme')
   assert.equal(pkg.bugs.url, 'https://github.com/wishesl/dsh-mcp-lazy/issues')
