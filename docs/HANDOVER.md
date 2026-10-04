@@ -34,6 +34,7 @@ DSH 的 MCP 懒加载桥：把已连接的 MCP 工具**按会话隐藏**，只�
 | `36621d0` | **面板可写描述 + 主题化面板 + 常驻开关（0.11.x）**：面板样式走 `--dsw-*` token；逐服务器「常驻/收起」开关；`modelProfileEdits` 面板开关；修掉「每次保存都过不了网关 JSON 校验」 |
 | `c75497b` | **设置导航图标 + 改名发布（0.12.0）**：`lib/client.js` 新增 `installNavIcon`（`settings.section` 没有图标位 ⇒ 认领 `[role="dialog"] nav button` 里文本等于自己 label 的那一行，藏官方 svg、用 `mask-image: url(data:image/svg+xml,…)` + `background-color: currentColor` 画漏斗，跟随主题；`MutationObserver` + `queueMicrotask` 合并；空 label 不认领；随 `ctx.effect` 清理；零命中/无 DOM/无 observer 一律 fail-soft 退回齿轮），新增 `test/client-nav-icon.test.mjs`（5 条）；包名 `@yilinxiao/dsh-mcp-lazy` → **`@sutong12/dsh-mcp-lazy`**（含 `TYPERT.package`、bundle patch、README、断言），版本 0.12.0 并发布到 npm |
 | `<0.13.0>` | **会话内持久披露（0.13.0）**：`lib/universal-manager.js` 把 per-agent 的 `selectedServer` 换成 `revealedServers` 集合（披露只增不减）；`onTurnStopping` 只在「fail-open 当轮放行」或「当前没有任何掩码」时重装，**已装掩码一律不动**（`appliedDeny` 相同则短路）；`failOpen` 不再清披露集合、只清当轮放行；离开目录/转常驻的服务器在 reconcile 时剪枝；`lib/mcp-view.js` 的注入索引文案改为「披露后本次会话内一直可直接调用」。动机是每轮收回会让工具表抖动、打掉 prompt cache |
+| `<0.13.0>` | **面板重做（0.13.0）**：`lib/client.js` 的 `CSS` 与 Panel 渲染重写 —— 头部标题/副标题分行、计数与「允许 AI 改描述」合成一条工具栏、刷新改为「保留旧内容 + 顶部细进度线」、首屏用骨架卡、保存/复制/失败改为带图标与语义色的横幅 + 按钮内 spinner + 按钮自身「已复制」、工具清单改名称/描述两行（描述两行截断）、编辑器字段纵排、开关/输入/按钮全部改用官方 `--dsw-*` token（含 `settings-card-fill`、`switch-thumb`、`bg-skeleton`、`button-primary-*`、`radius-*`、`shadow-lv1`、`ds-font-family-code`）。`test/client-bundle.test.mjs` 新增骨架/保留快照与复制反馈两条用例 |
 
 ## 4. 本机环境事实
 
@@ -90,7 +91,7 @@ lib/service.js  McpLazyService extends TypertRemoteService
 | `lib/universal-manager.js` | `currentCatalog()`（只读视图）与 `installUniversalManager(adapter, { onReady, hintsOf })`；`routerEntryForServer` 的 `routingHints` 是**函数源** |
 | `lib/tool-router.js` | `hintsOf(entry)` 同时接受数组与函数；打分与候选提示都走它 |
 
-面板展示：顶部「**注入的提示词**」折叠区（段名、order、未注入原因、**逐字文本**、复制按钮）+ 每服务器卡片（名称、工具数、关键词 chip、描述、来源徽标、**自定义描述编辑器**）+ 可展开工具清单（名称 + 描述截断 300 字符）+ 未通过准入的 `mcp__*` 工具折叠区 + 目录签名/快照时间/状态文件路径（或写入失败原因）；读取失败可重试，保存失败保留草稿，失败不崩。
+面板展示：标题/副标题/刷新 → 一条工具栏（收起/常驻计数 chip + 「允许 AI 改描述」开关）→ 状态横幅 → 「**注入的提示词**」折叠区（段名、order、未注入原因、**逐字文本**、复制按钮）+ 每服务器卡片（名称、工具数、常驻/收起开关、关键词 chip、描述、来源徽标、**自定义描述编辑器**）+ 可展开工具清单（名称一行 + 描述最多两行）+ 未通过准入的 `mcp__*` 工具折叠区 + 目录签名/快照时间/状态文件路径（或写入失败原因）；刷新时保留旧内容只在顶部走细进度线、首屏用骨架卡，保存/复制/失败走带图标的横幅（复制同时把按钮变成「已复制」），读取失败可重试，保存失败保留草稿，失败不崩。样式全部走宿主 `--dsw-*` token，明暗主题自动跟随。
 
 **写入语义（改这块前先读）**
 
@@ -155,7 +156,7 @@ npm test                      # 183 项：179 通过 / 0 失败 / 4 skipped（co
 |---|---|
 | `test/mcp-view.test.mjs` | 关键词派生（含 CJK 不产噪声）、覆盖归一化/逐字段合并与来源、截断/上限、空目录、字节稳定、快照裁剪、**面板 payload 的 available 语义**、`routingHintsOf` 的数组/函数两种源 |
 | `test/prompt-message.test.mjs` | 消息通道：注入一条 user 消息并带自有 source、同文本不重复排、文本变化时先移除待消费副本再排、空索引不注入、无 `inject()` 的 agent 跳过、`inject()` 抛错只记日志、`refresh` 只补过期者、`agents` 服务缺失/抛错时整体降级、本地消息形状与宿主一致 |\n| `test/profile-store.test.mjs` | 面板写入落盘与重载、原子写（无残留 tmp）、归一化、删除、损坏文件降级、无 profile 目录/锚点不可用→内存态、空 serverName 拒绝 |
-| `test/client-bundle.test.mjs` | 浏览器 bundle：`__ModuleLoader__` 注册、`settings.section` 参数、**两面 3 个描述符逐字段一致**（含参数 codec）、快照/参数 codec 行为、面板渲染（含**注入提示词区块**与编辑器）、空态/不可用/错误态、保存/重置/失败保留草稿/内存态提示 |
+| `test/client-bundle.test.mjs` | 浏览器 bundle：`__ModuleLoader__` 注册、`settings.section` 参数、**两面 3 个描述符逐字段一致**（含参数 codec）、快照/参数 codec 行为、面板渲染（含**注入提示词区块**与编辑器）、空态/不可用/错误态、保存/重置/失败保留草稿/内存态提示、**首屏骨架与刷新保留旧快照**、**复制反馈（按钮 + 横幅）** |
 | `test/dsh-version-compat.test.mjs` | stub-host（无 `context()`）：回退 section 的段名/order 3150/文本/稳定；real-host ① 另加：**注册为运行时上下文**（order 130）、`assemble().contexts` 与 `renderContextSnapshot()` 逐字含索引、**用 context 时 section 数为 0**；real-host ①：真 cordis + 真 ToolService + 真 scope `restrict` + 真 system-prompt 段位 + **真实 `validateTypertManifest`**；real-host ②（0.8.0 新增）：**真 TypertRemoteService** 挂载面板服务，`snapshot` 文本 == 上下文文本、`saveProfile` 落盘、中文别名经真实注册表**路由并披露**、`resetProfile` 还原、空 serverName 报错 |
 | `test/package-metadata.test.mjs` | 版本/仓库/exports/`dsh.client`/peer 走廊/**`TYPERT.package === pkg.name`** + 清单形状 + 3 个调用与参数 codec 行为 |
 | `test/universal-manager.test.mjs` | 现有覆盖 + **`hintsOf` 函数源即时生效**（保存后同一对象下一次查询即命中，并经路由工具披露）、抛错的 hints 源降级、**会话内持久披露**（第二台累加不替换、轮次边界不收回、静默轮次不重装掩码、重复披露幂等、离开目录剪枝、fail-open 不丢披露） |
@@ -271,6 +272,6 @@ profile     C:\Users\Tony\.dsh\profiles\web                  （link: 本仓库�
 导航图标    认领 [role="dialog"] nav button 里文本=自己 label 的那一行（官方无图标位），mask 剪影跟随主题
 面板状态    <profile>\.dsh-mcp-lazy\profiles.json            （面板自定义描述/关键词，原子写）
 注入条目    一条 user 消息：source `{ kind: 'mcp-lazy', form: 'catalog' }`（聊天里单独成条）；降级：运行时上下文 `mcp-lazy:index` @ order 130 → 提示词段 @ order 3150
-测试        npm test → 183 项（179 通过 / 4 skipped 左右）；真宿主 DSH_COMPAT_VERSION=0.2.0-rc.2 → 4/4
+测试        npm test → 185 项（180 通过 / 4 skipped 左右）；真宿主 DSH_COMPAT_VERSION=0.2.0-rc.2 → 4/4
 真宿主      DSH_COMPAT_VERSION=0.2.0-rc.2 node --test test/dsh-version-compat.test.mjs   （3/3）
 ```

@@ -470,6 +470,65 @@ test('the panel shows an empty state, an unavailable state and a recoverable err
   assert.match(failedText, /retry/)
 })
 
+test('the panel paints a skeleton first and keeps the last snapshot while refreshing', async () => {
+  const { plugin } = await loadBundle()
+  const { ctx, record } = clientContext({ snapshotResult: ok(SNAPSHOT) })
+  await plugin.apply(ctx)
+  const Panel = record.panel
+  const zh = record.dictionaries[0][1].zh
+  const t = (key) => zh[key] ?? key
+
+  // First paint: nothing to show yet, so three skeleton cards stand in — and the
+  // screen-reader line still carries the translated "loading" text.
+  const first = new Panel({ t, load: async () => SNAPSHOT })
+  first.state = { status: 'loading' }
+  const skeleton = JSON.stringify(first.render())
+  assert.match(skeleton, /data-mcp-lazy-loading/)
+  assert.match(skeleton, /读取中/)
+
+  // Refresh with a snapshot in hand: the list must NOT blank out; the refresh
+  // button reports the busy state instead.
+  const refresh = new Panel({ t, load: async () => SNAPSHOT })
+  refresh.state = { status: 'loading', snapshot: SNAPSHOT }
+  const refreshing = JSON.stringify(refresh.render())
+  assert.match(refreshing, /playwright/)
+  assert.match(refreshing, /data-mcp-lazy-refresh/)
+  assert.match(refreshing, /"disabled":true/)
+})
+
+test('copying the injected prompt confirms on the button and in a banner', async () => {
+  const { plugin } = await loadBundle()
+  const { ctx, record } = clientContext({ snapshotResult: ok(SNAPSHOT) })
+  await plugin.apply(ctx)
+  const Panel = record.panel
+  const zh = record.dictionaries[0][1].zh
+
+  const copied = []
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    writable: true,
+    value: { clipboard: { writeText: async (text) => { copied.push(text) } } }
+  })
+  try {
+    const instance = new Panel({ t: (key) => zh[key] ?? key, load: async () => SNAPSHOT })
+    instance.state = { status: 'ready', snapshot: SNAPSHOT }
+    instance.copyPrompt()
+    await settle()
+
+    assert.deepEqual(copied, [PROMPT_TEXT], 'the copied payload is the injected text verbatim')
+    assert.equal(instance.state.copied, true)
+    assert.equal(instance.state.notice.kind, 'ok')
+    // Both feedback layers: the button itself and the status banner.
+    assert.match(JSON.stringify(instance.render()), /已复制/)
+    assert.match(JSON.stringify(instance.render()), /data-mcp-lazy-notice/)
+    instance.componentWillUnmount()
+  } finally {
+    if (original === undefined) delete globalThis.navigator
+    else Object.defineProperty(globalThis, 'navigator', original)
+  }
+})
+
 /** Wrap a payload the way the Remote gateway answers a successful call. */
 function ok(value) {
   return { ok: true, value }
