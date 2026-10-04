@@ -3,7 +3,7 @@
 > 面向下一个接手的人（或下一个会话）。目标：不用重新推导，就能继续开发、验证、排障、回滚。
 > 仓库：`https://github.com/wishesl/dsh-mcp-lazy`（fork 自 `leaforbook/dsh-mcp-lazy`）
 > 本地克隆：`E:\gopackage2\2026-8\woker1\dsh-mcp-lazy-fork`
-> 当前版本：`0.13.0`（npm 上最新发布仍是 `0.12.0`：`@sutong12/dsh-mcp-lazy`）
+> 当前版本：`0.13.0`（已发布 npm：`@sutong12/dsh-mcp-lazy@0.13.0`，latest）
 
 ---
 
@@ -35,6 +35,7 @@ DSH 的 MCP 懒加载桥：把已连接的 MCP 工具**按会话隐藏**，只�
 | `c75497b` | **设置导航图标 + 改名发布（0.12.0）**：`lib/client.js` 新增 `installNavIcon`（`settings.section` 没有图标位 ⇒ 认领 `[role="dialog"] nav button` 里文本等于自己 label 的那一行，藏官方 svg、用 `mask-image: url(data:image/svg+xml,…)` + `background-color: currentColor` 画漏斗，跟随主题；`MutationObserver` + `queueMicrotask` 合并；空 label 不认领；随 `ctx.effect` 清理；零命中/无 DOM/无 observer 一律 fail-soft 退回齿轮），新增 `test/client-nav-icon.test.mjs`（5 条）；包名 `@yilinxiao/dsh-mcp-lazy` → **`@sutong12/dsh-mcp-lazy`**（含 `TYPERT.package`、bundle patch、README、断言），版本 0.12.0 并发布到 npm |
 | `<0.13.0>` | **会话内持久披露（0.13.0）**：`lib/universal-manager.js` 把 per-agent 的 `selectedServer` 换成 `revealedServers` 集合（披露只增不减）；`onTurnStopping` 只在「fail-open 当轮放行」或「当前没有任何掩码」时重装，**已装掩码一律不动**（`appliedDeny` 相同则短路）；`failOpen` 不再清披露集合、只清当轮放行；离开目录/转常驻的服务器在 reconcile 时剪枝；`lib/mcp-view.js` 的注入索引文案改为「披露后本次会话内一直可直接调用」。动机是每轮收回会让工具表抖动、打掉 prompt cache |
 | `<0.13.0>` | **面板重做（0.13.0）**：`lib/client.js` 的 `CSS` 与 Panel 渲染重写 —— 头部标题/副标题分行、计数与「允许 AI 改描述」合成一条工具栏、刷新改为「保留旧内容 + 顶部细进度线」、首屏用骨架卡、保存/复制/失败改为带图标与语义色的横幅 + 按钮内 spinner + 按钮自身「已复制」、工具清单改名称/描述两行（描述两行截断）、编辑器字段纵排、开关/输入/按钮全部改用官方 `--dsw-*` token（含 `settings-card-fill`、`switch-thumb`、`bg-skeleton`、`button-primary-*`、`radius-*`、`shadow-lv1`、`ds-font-family-code`）。`test/client-bundle.test.mjs` 新增骨架/保留快照与复制反馈两条用例 |
+| `<0.13.0>` | **发布 0.13.0**：npmjs 上 `latest` 已是 `@sutong12/dsh-mcp-lazy@0.13.0`（2026-10-04 20:16Z；shasum `b60c4149…` 与本地 `npm publish --dry-run` 逐字节一致）。旧的 classic token 在 10-03 之后失效（`whoami` 401），改用 `npm login --registry=https://registry.npmjs.org/` 走浏览器授权；PUT 返回 202 属异步处理，几分钟后才在 `npm view` 可见。发布坑见 §12 |
 
 ## 4. 本机环境事实
 
@@ -43,7 +44,7 @@ DSH 的 MCP 懒加载桥：把已连接的 MCP 工具**按会话隐藏**，只�
 | harness | 运行中的宿主安装目录是 `E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.1-alpha.1`（由 dsh-launcher 监督，网页在 http://127.0.0.1:3080）。`0.2.0-rc.2` 是旧目录：仓库 `node_modules\@deepseek-ai\*` 里的 junction 曾指向它，会让 `test/host-runtime-compat.test.mjs` 失败 → `npm ci` 清掉后，用**当前**安装目录重跑边车脚本 |
 | profile | 现在在用的是 **web** profile：`C:\Users\Tony\.dsh\profiles\web`（`DSH_PROFILE=web`）；桌面 desktop profile 另有安装，见 §4 旧记录 |
 | 插件安装方式 | web profile `package.json` 里 `"@sutong12/dsh-mcp-lazy": "link:E:/gopackage2/2026-8/woker1/dsh-mcp-lazy-fork"`（改一行代码、重启即生效；**必须**先跑 `node scripts/link-host-peers.mjs E:\gopackage2\2026-8\dsh-start\dsh-vsn\0.2.1-alpha.1`，`npm ci` 会清掉那些 junction） |
-| 已装版本 | 仓库 0.13.0（profile 用 `link:` 指本仓库，重启即生效）；npm 上最新发布仍是 0.12.0（首包；0.5.1 是上游 `@yilinxiao` 的发布，不是本 fork） |
+| 已装版本 | 仓库 0.13.0（profile 用 `link:` 指本仓库，重启即生效）；npm 上 latest 也是 0.13.0（2026-10-04 发布；0.5.1 是上游 `@yilinxiao` 的发布，不是本 fork） |
 | MCP 服务器（全部常开、全部被接管） | `playwright` 25 工具、`chrome-devtools` 30、`tavily` 5、`context7` 2、`magicui`、`pwsh-mcp` |
 | 面板自定义描述的落盘位置 | `<profile>\.dsh-mcp-lazy\profiles.json`（本机即 `C:\Users\Tony\.dsh\profiles\web\.dsh-mcp-lazy\profiles.json`） |
 | 包名 | `@sutong12/dsh-mcp-lazy`（0.12.0 起；旧名 `@yilinxiao/dsh-mcp-lazy` 只存在于上游发布与历史提交） |
@@ -207,7 +208,7 @@ CI（`.github/workflows/test.yml`）：`test` 作业跑全量（Node 20/24）；
 1. **回填补丁**：挂载时从 `ctx.agents` 枚举既有 agent 并接管，让"装上即对当前会话生效"（可选注入，老线自动跳过）。
 2. **包名/scope**：0.12.0 起已定为 `@sutong12/dsh-mcp-lazy`（同步了 `cordis.patch.yml`、README、断言、`TYPERT.package`）；GitHub 仓库仍是 `wishesl/dsh-mcp-lazy`。
 3. 面板增强：按会话显示"已披露"状态、一键复制 `serverName`、覆盖的导入/导出（`profiles.json` 目前只能手改）、关键词编辑器做 tag 化。
-4. ~~发布 npm~~ 已完成：`@sutong12/dsh-mcp-lazy@0.12.0`（`npm publish --registry=https://registry.npmjs.org/`）。
+4. ~~发布 npm~~ 已完成：`@sutong12/dsh-mcp-lazy@0.13.0`（`npm login --registry=https://registry.npmjs.org/` → 浏览器/2FA → `npm publish --registry=https://registry.npmjs.org/`；见 §12 的两个坑）。
 5. 上游回流：把 0.2 线兼容与这些功能作为 PR 提回 `leaforbook/dsh-mcp-lazy`。
 6. 可选：把面板编辑的字段也写进 `cordis.patch.yml` 的 `serverProfiles`（现在是本插件自己的状态文件，好处是不改用户的 YAML，代价是用户的配置体系里看不到这些覆盖）。
 7. 可选：给 CI 加一条 tag → npm 发布的工作流（现在是本地手发）。
@@ -219,6 +220,10 @@ CI（`.github/workflows/test.yml`）：`test` 作业跑全量（Node 20/24）；
 - **清点验证工具**：`E:\gopackage2\2026-8\woker1\_contract\host` 是沙盒（装了真实 typert-loader / typert-protocol 等），`probe-manifest.mjs`、`probe-installed.mjs` 可直接用真实 loader 校验清单；改 `TYPERT` 或增删调用前后都跑一次（`cd _contract\host; node probe-manifest.mjs`）。
 - **装机时宿主在跑 → `install_bundle` 可能报 `application: failed` + `ambiguous-install`**：pnpm 其实成功（exitCode 0），profile 里 `node_modules\@sutong12\dsh-mcp-lazy` 也已换成新版本（读 `package.json` 版本号 + 比对 `lib\*.js` 哈希即可确认；注意本地工作区可能是 CRLF、git 检出是 LF），只是运行中的进程还持有旧模块，管理器无法声称一次干净的激活。**以磁盘文件为准，然后重启 DSH**，不要为此反复重装。
 - **`npm install --no-save` 会互相剪包**：它把上一次未写进 package.json 的包当 extraneous 删掉，所以 compat 的多个包必须**一条命令**装；跑完基线 lane 前记得 `npm ci` 还原，否则 `test/host-runtime-compat.test.mjs`（"profile 不得 shadow 宿主 runtime 包"）会失败——这是**环境问题，不是代码缺陷**，CI 里两个 job 天然分开所以不会遇到。
+- **发布 npm 的三个坑（0.13.0 踩过）**：
+  1. **必须显式指定官方源**：本机环境变量把默认 registry 指到了 `registry.npmmirror.com`（`npm_config_registry` / `NPM_CONFIG_REGISTRY`），所以发布要写全 `npm publish --registry=https://registry.npmjs.org/`，登录同理（`npm login --registry=https://registry.npmjs.org/`；直接 `npm login` 会登到镜像）。
+  2. **DSH 拉起的 shell 里 `NODE_PATH` 已设**：`prepublishOnly` 的 `npm test` 走 CJS `require.resolve`，会认这个变量从而误报 `host-runtime-compat` 失败 → 发布前在同一会话执行 `$env:NODE_PATH=''`，或改用 `npm publish --ignore-scripts`（测试另行跑过）。
+  3. **PUT 返回 202 是异步处理**：`npm view` 可能几分钟后才看得到新版本，别急着重复发（同版本重发会 403）。校验是否真的上架：`npm view @sutong12/dsh-mcp-lazy@<版本> dist.shasum --registry=https://registry.npmjs.org/` 应等于本地 `npm publish --dry-run` 打印的 shasum。
 - **面板写入的状态文件**：`<profile>\.dsh-mcp-lazy\profiles.json`。手工改它也能生效（下一轮装配读）；字段与 `serverProfiles` 同形，超长/多行会被归一化（描述折成一行、关键词去重截断）。
 - **不要做的事**：
   - 不要用 `plugin_manager set_plugin target=include:mcp-playwright enabled=false` 关 MCP —— 关掉会让该 server 从路由目录消失，等于删能力；要停用整个接管，改 profile patch 里 `- id: mcp-lazy-manager` + `disabled: true`。
@@ -261,7 +266,7 @@ dsh plugin --profile web remove @sutong12/dsh-mcp-lazy
 
 ```
 仓库        https://github.com/wishesl/dsh-mcp-lazy          HEAD <见 §3 最新一行> / 0.13.0
-npm         @sutong12/dsh-mcp-lazy@0.12.0                   （最新发布；发布用 --registry=https://registry.npmjs.org/）
+npm         @sutong12/dsh-mcp-lazy@0.13.0                   （latest；发布：npm login --registry=https://registry.npmjs.org/ → $env:NODE_PATH='' → npm publish 同源）
 本地克隆    E:\gopackage2\2026-8\woker1\dsh-mcp-lazy-fork
 沙盒        E:\gopackage2\2026-8\woker1\_contract\host      （真实 typert-loader 校验：node probe-manifest.mjs）
 profile     C:\Users\Tony\.dsh\profiles\web                  （link: 本仓库；改插件后需重启 DSH）
